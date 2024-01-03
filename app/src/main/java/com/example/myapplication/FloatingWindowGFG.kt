@@ -6,6 +6,7 @@ package com.example.myapplication
 //import kotlinx.coroutines.Dispatchers
 //import kotlinx.coroutines.launch
 //import kotlinx.coroutines.withContext
+
 import android.accounts.Account
 import android.accounts.AccountManager
 import android.annotation.SuppressLint
@@ -22,6 +23,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.util.Log
 import android.view.Choreographer
 import android.view.Gravity
 import android.view.LayoutInflater
@@ -66,6 +68,7 @@ class FloatingWindowGFG : Service() {
     private var handler = Handler(Looper.getMainLooper())
     private var initialX: Int = 0
     private var initialY: Int = 0
+    var sourceyt=false;
     private var initialTouchX: Float = 0.toFloat()
     private var initialTouchY: Float = 0.toFloat()
     private var isMoveAction = false
@@ -228,8 +231,9 @@ class FloatingWindowGFG : Service() {
 //            dialog.show()
         })
 
-        fun adjustheight()
+        fun adjustheight(msg :String)
         {
+            Scrolltext.text = msg;
             println("callllllled");
             //    captionsWidget.visibility=View.VISIBLE
             val maxcHeight = (height * 0.20).toInt()
@@ -237,17 +241,47 @@ class FloatingWindowGFG : Service() {
             println("heeeeelllllllllllllloooooooooo");
             var lineCount: Int=1
             println(maxcHeight)
-          //  Scrolltext.post(Runnable {
+            Scrolltext.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
+            val widthMeasureSpec =
+                View.MeasureSpec.makeMeasureSpec(Scrolltext.measuredWidth, View.MeasureSpec.AT_MOST)
+            val heightMeasureSpec =
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+            Scrolltext.measure(widthMeasureSpec, heightMeasureSpec)
             lineCount = Scrolltext.getLineCount()
-                // Use lineCount here
-           // })
-            println(layoutParams.height)
-            if((Scrolltext.height*lineCount)>maxcHeight)
-                layoutParams.height = maxcHeight
-            else
-                layoutParams.height=Scrolltext.height
-            captionsWidget.layoutParams = layoutParams
-            captionsWidget.requestLayout()
+          //  lineCount = Scrolltext.lineCount;
+            Scrolltext.post(Runnable {
+                var lineCount: Int = Scrolltext.getLineCount()
+                if(lineCount==0)
+                    lineCount=1;
+                println(layoutParams.height)
+                Scrolltext.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
+                if((Scrolltext.measuredHeight*lineCount)>maxcHeight) {
+                    layoutParams.height = maxcHeight
+                    println("yessssssssssssssssssssssssssssssssssssssss");
+                    println(msg);
+                    println(maxcHeight)
+                    println(lineCount);
+                    println(Scrolltext.height*lineCount)
+                }
+                else {
+                    println("nooooooooooooooooooooooooooooodncjbdvchvcgvsdgcvdsgcfg");
+                    println(Scrolltext.text.toString());
+                    layoutParams.height = (Scrolltext.measuredHeight * lineCount)
+                    println(msg);
+                    println(Scrolltext.measuredHeight)
+                    println(lineCount);
+                    println(Scrolltext.measuredHeight*lineCount)
+                }
+                captionsWidget.layoutParams = layoutParams
+                println("cappppppppppptionsssssssssssssssss");
+                println(captionsWidget.height)
+                println(lineCount);
+                println(captionsWidget.height)
+                captionsWidget.requestLayout()
+            })
+
+
+
            //  hideTranscript.visibility=View.VISIBLE;
 //            val newWidth =  735
 //            val newHeight =  (height * 0.80f).toInt()
@@ -336,19 +370,19 @@ class FloatingWindowGFG : Service() {
                             if (initial) {
                                 println("200000000000000ssssss")
                                 msg = removeQuotes(msg)
-                                Scrolltext.text = msg.toString()
+                                Scrolltext.text = msg;
                                 if(Scrolltext.text!="Your captions are loading...!")
                                 {
                                     showTranscript.setBackgroundResource(R.drawable.rounded_button_background);
                                     showTranscript.setText("show tanscript");
+                                    showTranscript.isEnabled=true;
                                     showTranscript.layoutParams.width = ViewGroup.LayoutParams.WRAP_CONTENT
                                 }
                                 val jsCode = "sendMessage('$msg');"
                                 println(jsCode)
                                 webView.evaluateJavascript("javascript:sendMessage(\"$msg\")", null)
                                 initial = false
-                                adjustheight();
-                                adjustheight();
+                                adjustheight(msg);
                             }
                         }
                     }
@@ -357,8 +391,8 @@ class FloatingWindowGFG : Service() {
             msg = removeQuotes(msg);
             msg = removeQuotes(msg);
             Scrolltext.setText(msg);
-            adjustheight()
-            adjustheight();
+            adjustheight(msg)
+            adjustheight(msg);
             jsCode0 = "sendMessage('$msg');"
             println(jsCode0);
             println("helllllllllllloo");
@@ -438,14 +472,15 @@ class FloatingWindowGFG : Service() {
 //                    myTextView.text = responseBody
                         if(Scrolltext.text!="Your captions are loading...!")
                         {
+                            showTranscript.isEnabled=true;
                             showTranscript.setBackgroundResource(R.drawable.rounded_button_background);
                             showTranscript.setText("Show Transcript")
                             showTranscript.layoutParams.width = ViewGroup.LayoutParams.WRAP_CONTENT
 //            showTranscript.background=R.drawable.disable_button_bg as GradientDrawable
                         }
                         Scrolltext.setText(responseBody.toString());
-                        adjustheight();
-                        adjustheight();
+                        adjustheight(responseBody.toString());
+                        adjustheight(responseBody.toString());
                     }
 //                    readingTextView?.text = responseBody
                     println("uithereeeeeeeeeeeeeeeeed");
@@ -497,11 +532,13 @@ class FloatingWindowGFG : Service() {
                 val extras = intent.getStringExtra("url");
                 println("extrasssssssssssssssssssssssssssssss");
                 println(extras);
+                sourceyt=true;
                 captions_message = fetchCaptionsFromAPI(extras.toString());
                 println(captions_message)
             }
             else if(intent.getStringExtra("message")!=null)
             {
+                sourceyt=false;
                 println("heeeeeeeeeeeeeeeeeeeeeeeeelooooooooooooooo meeeeeeeeeeeeeeeesss");
                 val extras = intent.getStringExtra("message");
                 println(extras.toString())
@@ -571,9 +608,9 @@ class FloatingWindowGFG : Service() {
         if(Scrolltext.text=="Your captions are loading...!")
         {
             showTranscript.setText("Loading captions...!")
+            showTranscript.isEnabled=false;
             showTranscript.layoutParams.width = ViewGroup.LayoutParams.WRAP_CONTENT
             showTranscript.setBackgroundResource(R.drawable.disable_button_bg);
-            showTranscript.setOnClickListener(null)
 
 //            showTranscript.background=R.drawable.disable_button_bg as GradientDrawable
         }
@@ -603,6 +640,7 @@ class FloatingWindowGFG : Service() {
             floatWindowLayoutParam!!.height = ViewGroup.LayoutParams.WRAP_CONTENT
             windowManager!!.updateViewLayout(floatView, floatWindowLayoutParam)
             showTranscript.visibility=View.GONE
+            adjustheight(Scrolltext.text.toString());
         }
         hideTranscript.setOnClickListener {
             showTranscript.visibility=View.VISIBLE;
@@ -701,7 +739,7 @@ class FloatingWindowGFG : Service() {
             }
         }
         val intentFilter = IntentFilter("SendMessage")
-        registerReceiver(broadcastReceiver, intentFilter,)
+        registerReceiver(broadcastReceiver, intentFilter)
 
 //        glb files renderning
 
@@ -763,16 +801,26 @@ class FloatingWindowGFG : Service() {
             .setMessage("Closing this will disable Accessibility setting. \n" +
                     "If you wish to continue using Let'sTalkSign interpretation in other apps, switch to other app without closing\n Do you wish to close?")
             .setPositiveButton("Yes") { dialog, which ->
-                val intent = Intent("stop_action")
-                intent.putExtra("stop_message", "stop_and_exit")
-                sendBroadcast(intent)
+                if(sourceyt)
+                {
+                    val stopServiceIntent = Intent(this, FloatingWindowGFG::class.java)
+                    stopService(stopServiceIntent)
+                                       stopSelf()
+                    System.exit(0)
+                }
+                else {
+                    val intent = Intent("stop_action")
+                    intent.putExtra("stop_message", "stop_and_exit")
+                    sendBroadcast(intent)
 //                val stopServiceIntent = Intent(this, FloatingWindowGFG::class.java)
 //                stopService(stopServiceIntent)
- //               stopSelf()
+                    //               stopSelf()
 //                System.exit(0)
 
-                // Code to execute when "Yes" is clicked
-                // You can dismiss the dialog or perform any other action
+                    // Code to execute when "Yes" is clicked
+                    // You can dismiss the dialog or perform any other action
+
+                }
                 dialog.dismiss()
                 // Add your code here for "Yes" button click
             }

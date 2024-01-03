@@ -57,7 +57,7 @@
 
     <WebView
         android:id="@+id/overlay_webview"
-        android:layout_height="380dp"
+        android:layout_height="375dp"
         android:layout_marginHorizontal="10dp"
         android:layout_width="match_parent" />
 
