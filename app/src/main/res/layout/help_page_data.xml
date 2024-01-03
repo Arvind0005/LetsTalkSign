@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:ignore="MissingDefaultResource">
+    <!-- First Vertical LinearLayout -->
+    <LinearLayout
+        android:id="@+id/firstlinearlayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <TextView
+            android:id="@+id/titlefl"
+            android:layout_width="match_parent"
+            android:layout_height="50dp"
+            android:text="How to give permission?"
+           />
+
+        <View
+            android:background="@color/black"
+            android:id="@+id/image"
+            android:layout_below="@+id/titlefl"
+            android:layout_width="match_parent"
+             android:layout_height="10dp"/>
+
+        <View
+            android:id="@+id/viewfl"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:background="#CCCCCC"/>
+    </LinearLayout>
+
+    <!-- Second Vertical LinearLayout -->
+
+
+</RelativeLayout>
