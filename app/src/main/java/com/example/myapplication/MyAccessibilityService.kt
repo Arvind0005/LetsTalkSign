@@ -92,11 +92,12 @@ class MyAccessibilityService<AccessibilityNodeInfo> : AccessibilityService() {
 //        val scheduleTaskExecutor: ScheduledExecutorService = Executors.newScheduledThreadPool(1)
 //        scheduleTaskExecutor.scheduleAtFixedRate({ serviceChecker() }, 0, 5, TimeUnit.SECONDS)
     }
-//    override fun onDestroy() {
-//        super.onDestroy()
-//        // Unregister the BroadcastReceiver in the onDestroy method
-//        //unregisterReceiver(receiver)
-//    }
+    override fun onDestroy() {
+        unregisterReceiver(mysms);
+        super.onDestroy()
+        // Unregister the BroadcastReceiver in the onDestroy method
+
+    }
 
     private fun serviceChecker() {
 //        if (!isActivityRunning(MainActivity::class.java)!!) {

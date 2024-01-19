@@ -1,14 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="800dp"
-    android:layout_height="700dp"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
     android:id="@+id/linearlay"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:background="#ffffff"
-    android:orientation="vertical">
+    android:orientation="vertical"
+    tools:ignore="WebViewLayout">
 
     <LinearLayout
-        android:layout_width="400dp"
+        android:layout_width="245dp"
         android:layout_height="wrap_content"
         android:layout_centerHorizontal="true"
         android:orientation="horizontal">
@@ -58,8 +60,9 @@
     <WebView
         android:id="@+id/overlay_webview"
         android:layout_height="375dp"
+        android:layout_width="225dp"
         android:layout_marginHorizontal="10dp"
-        android:layout_width="match_parent" />
+        />
 
     <ScrollView
         android:visibility="gone"
@@ -98,7 +101,7 @@
         android:elevation="10dp"
         android:layout_margin="10dp"
         android:background="@drawable/rounded_button_background"
-        android:visibility="visible"
+        android:visibility="gone"
         android:textColor="@color/white"
         android:layout_gravity="center_horizontal"
         android:fontFamily="@font/rimouskisb_regular"

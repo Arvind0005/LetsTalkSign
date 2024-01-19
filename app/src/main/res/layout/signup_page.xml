@@ -59,7 +59,6 @@
                     android:layout_marginStart="20dp"
                     android:layout_marginTop="20dp"
                     android:layout_marginEnd="20dp"
-                    android:layout_marginBottom="20dp"
                     app:cardCornerRadius="10dp"> <!-- Adjust the corner radius as needed -->
 
                     <ImageView
@@ -70,15 +69,32 @@
                         android:src="@drawable/signin_wgoogle"
                         android:scaleType="fitXY" />
 
+
                 </androidx.cardview.widget.CardView>
 
 
 
 
+
             </RelativeLayout>
+            <CheckBox
+                android:layout_marginHorizontal="10dp"
+                android:fontFamily="@font/rimouskisb_regular"
+                android:layout_gravity="center"
+                android:textColor="@color/white"
+                android:id="@+id/rememberCheckBox"
+                android:layout_centerHorizontal="true"
+                android:layout_marginStart="20dp"
+                android:layout_marginEnd="20dp"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Remember this account next time and login automatically!"
+                android:checked="true"
+            />
+
             <View
                 android:layout_width="match_parent"
-                android:layout_height="80dp"></View>
+                android:layout_height="45dp"></View>
 
 
             <ImageView

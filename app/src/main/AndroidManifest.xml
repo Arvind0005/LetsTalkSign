@@ -8,11 +8,12 @@
     <uses-feature
         android:name="android.hardware.telephony"
         android:required="false" />
+    <uses-permission android:name="android.permission.READ_SMS"/>
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
     <uses-permission android:name="android.permission.CALL_PHONE" />
     <uses-permission android:name="android.permission.MANAGE_OWN_CALLS" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.ACTION_MANAGE_OVERLAY_PERMISSION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
@@ -24,13 +25,12 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.GET_ACCOUNTS" />
-    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.WRITE_SETTINGS" />
     <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" />
     <application
+        android:name=".App"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
@@ -60,17 +60,17 @@
             </intent-filter>
         </service>
         <service
-            android:name=".LoadGlb"
-            android:exported="true"
-            android:enabled="true">
-            <!-- Additional service attributes and elements if needed -->
-        </service>
-        <service
             android:name=".LoadGLBData"
-            android:exported="true"
+            android:exported="false"
             android:enabled="true">
             <!-- Additional service attributes and elements if needed -->
         </service>
+        <receiver android:name=".SmsListener"
+            android:exported="false">
+            <intent-filter android:priority="1000">
+                <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+            </intent-filter>
+        </receiver>
         <service android:name=".Alertbox"
             android:enabled="true"
             android:exported="false"
@@ -81,7 +81,7 @@
         </service>
         <service android:name=".PhoneCall_Service"
             android:permission="android.permission.BIND_TELECOM_CONNECTION_SERVICE"
-            android:exported="true">
+            android:exported="false">
             <intent-filter>
                 <action android:name="android.telecom.ConnectionService" />
             </intent-filter>
@@ -101,26 +101,30 @@
                 android:name="android.accessibilityservice.canRequestTouchExplorationMode"
                 android:value="true"/>
         </service>
-
         <activity
             android:name=".MainActivity"
             android:label="Let'sTalkSign">
+        </activity>
+        <activity
+            android:name="com.razorpay.CheckoutActivity"
+            android:label="Let'sTalkSign"
+            android:exported="false"> <!-- Add this line -->
+        </activity>
+        <receiver
+            android:name="com.razorpay.RzpTokenReceiver"
+            android:exported="false"> <!-- Add this line -->
+        </receiver>
+        <activity
+            android:name=".PermissionsRequestActivity"
+            android:label="PermissionsRequestActivity">
         </activity>
         <activity
             android:name=".Display"
             android:label="Display">
         </activity>
         <activity
-            android:name=".Phone_Call"
-            android:label="Display">
-        </activity>
-        <activity
-            android:name=".ImageToText"
-            android:label="ImageToText">
-        </activity>
-        <activity
-            android:name=".DashboardActivity"
-            android:label="dashboardActivity">
+            android:name=".RazorpayPayment"
+            android:label="RazorpayPayment">
         </activity>
         <activity
             android:name=".Signin_page"
@@ -135,14 +139,6 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="text/plain" />
             </intent-filter>
-        </activity>
-        <activity
-            android:name=".HelpPage"
-            android:label="HelpPage">
-        </activity>
-        <activity
-            android:name=".HomePage"
-            android:label="HomePage">
         </activity>
         <activity
             android:name=".Logs"

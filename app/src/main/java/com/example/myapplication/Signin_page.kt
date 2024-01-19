@@ -1,14 +1,22 @@
 package com.example.myapplication
 import android.annotation.SuppressLint
 import android.app.ProgressDialog
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.provider.Settings
+import android.util.Log
 import android.view.View
+import android.widget.CheckBox
 import android.widget.ImageView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
+import com.android.volley.RequestQueue
+import com.android.volley.toolbox.StringRequest
+import com.android.volley.toolbox.Volley
+import com.bugfender.sdk.Bugfender
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
@@ -18,14 +26,52 @@ import com.google.android.gms.tasks.Task
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
+import com.google.gson.Gson
+import com.google.gson.JsonObject
+
 
 
 class Signin_page : AppCompatActivity() {
 
     lateinit var mGoogleSignInClient: GoogleSignInClient
+    private lateinit var rememberCheckBox: CheckBox
     val Req_Code: Int = 123
     private var progressDialog: ProgressDialog? = null
     private lateinit var firebaseAuth: FirebaseAuth
+    private lateinit var secureTokenManager: SecureTokenManager
+
+    private var mRequestQueue: RequestQueue? = null
+    private var mStringRequest: StringRequest? = null
+
+    private fun postData(url: String, params: Map<String, String?>) {
+        println("yessssssssssssssssssssssssssssjbhvbdhbvhjbjdbhfg")
+
+        // RequestQueue initialized
+        mRequestQueue = Volley.newRequestQueue(this)
+
+        // String Request initialized
+        mStringRequest = object : StringRequest(
+            Method.POST, url,
+            { response ->
+                println("response got from server")
+                val gson = Gson()
+                val jsonObject: JsonObject = gson.fromJson(response, JsonObject::class.java)
+                val id= jsonObject.getAsJsonPrimitive("token")?.asString;
+                secureTokenManager.saveToken(id.toString());
+            },
+            { error ->
+                println("errrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr SIgninactivity")
+                println(error)
+                Log.i(ContentValues.TAG, "Error :" + error.networkResponse)
+            }) {
+            override fun getParams(): Map<String, String?> {
+                return params
+            }
+        }
+
+        mRequestQueue!!.add(mStringRequest)
+    }
+
 
     private val serviceIntent by lazy { Intent(this, FloatingWindowGFG::class.java) }
 
@@ -39,11 +85,26 @@ class Signin_page : AppCompatActivity() {
         stopService(serviceIntent)
     }
 
+    private fun getAndroidId(context: Context): String {
+        Bugfender.d("MainActivity","getAndroidId");
+        val id= Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID);
+        secureTokenManager.saveId(id);
+        return id;
+        Bugfender.d("getAndroidId",
+            Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID))
+    }
+
     @SuppressLint("MissingInflatedId")
     override fun onCreate(savedInstanceState: Bundle?) {
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO);
         super.onCreate(savedInstanceState)
         setContentView(R.layout.signup_page)
+        secureTokenManager = SecureTokenManager(this)
+       
+        rememberCheckBox = findViewById(R.id.rememberCheckBox)
+        val sharedPreferences = getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
+        val rememberUser = sharedPreferences.getBoolean("REMEMBER_USER", true)
+        rememberCheckBox.isChecked = rememberUser
         progressDialog = ProgressDialog(this)
         var Signin=findViewById<ImageView>(R.id.Signin);
         val receivedIntent = intent
@@ -66,6 +127,7 @@ class Signin_page : AppCompatActivity() {
         firebaseAuth = FirebaseAuth.getInstance()
 
         Signin.setOnClickListener { view: View? ->
+            var id=getAndroidId(this);
             Toast.makeText(this, "Logging In", Toast.LENGTH_SHORT).show()
             signInGoogle()
         }
@@ -80,6 +142,11 @@ class Signin_page : AppCompatActivity() {
         progressDialog?.show()
         val signInIntent: Intent = mGoogleSignInClient.signInIntent
         startActivityForResult(signInIntent, Req_Code)
+
+        val sharedPreferences = getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
+        val editor = sharedPreferences.edit()
+        editor.putBoolean("REMEMBER_USER", rememberCheckBox.isChecked)
+        editor.apply()
     }
 
     // onActivityResult() function : this is where
@@ -96,6 +163,20 @@ class Signin_page : AppCompatActivity() {
         try {
             val account: GoogleSignInAccount? = completedTask.getResult(ApiException::class.java)
             if (account != null) {
+                var id= getAndroidId(this);
+                val userEmail = account?.email
+                val userName = account?.displayName
+                val sharedPreferences = getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
+                val editor = sharedPreferences.edit()
+                editor.putString("UserEmail", userEmail);
+                editor.putString("UserName",userName);
+                editor.apply()
+                if (userEmail != null) {
+                    secureTokenManager.saveEmail(userEmail)
+                };
+                val url = "https://trrain4-web.letstalksign.org/app_login"
+                val params= mapOf("customer_id" to "10009", "device_id" to id.toString(),"gmail_id" to userEmail, "full_name" to userName)
+                postData(url, params)
                 UpdateUI(account)
             }
         } catch (e: ApiException) {
@@ -143,7 +224,11 @@ class Signin_page : AppCompatActivity() {
 
     override fun onStart() {
         super.onStart()
-        if (GoogleSignIn.getLastSignedInAccount(this) != null) {
+
+        val sharedPreferences = getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
+        val rememberUser = sharedPreferences.getBoolean("REMEMBER_USER", true)
+
+        if (GoogleSignIn.getLastSignedInAccount(this) != null && rememberUser) {
             startActivity(
                 Intent(
                     this, MainActivity

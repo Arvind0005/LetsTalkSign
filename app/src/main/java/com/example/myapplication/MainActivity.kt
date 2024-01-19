@@ -3,7 +3,7 @@ package com.example.myapplication//package com.example.myapplication
 
 //import androidx.test.platform.app.InstrumentationRegistry
 //import org.junit.Test
-
+import WebAppInterface
 import android.Manifest
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
@@ -13,13 +13,14 @@ import android.app.ActivityManager
 import android.app.AlertDialog
 import android.app.AppOpsManager
 import android.app.ProgressDialog
-import android.app.UiAutomation
 import android.app.usage.UsageStatsManager
+import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.ContentValues
 import android.content.Context
 import android.content.DialogInterface
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
@@ -38,7 +39,7 @@ import android.speech.RecognizerIntent
 import android.text.Editable
 import android.text.TextWatcher
 import android.util.Log
-import android.util.TypedValue
+import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.View.OnTouchListener
@@ -51,6 +52,7 @@ import android.webkit.WebViewClient
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Button
+import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageView
@@ -71,9 +73,14 @@ import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.GravityCompat
-import androidx.core.widget.doOnTextChanged
 import androidx.drawerlayout.widget.DrawerLayout
-import androidx.test.platform.app.InstrumentationRegistry
+import com.android.volley.NetworkResponse
+import com.android.volley.Request
+import com.android.volley.RequestQueue
+import com.android.volley.Response
+import com.android.volley.toolbox.StringRequest
+import com.android.volley.toolbox.Volley
+import com.bugfender.sdk.Bugfender
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions
 import com.google.android.gms.auth.api.signin.GoogleSignIn
@@ -81,7 +88,6 @@ import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.material.navigation.NavigationView
 import com.google.firebase.auth.FirebaseAuth
-import com.google.mlkit.nl.languageid.LanguageIdentification
 import com.google.mlkit.nl.translate.TranslateLanguage
 import com.google.mlkit.nl.translate.Translation
 import com.google.mlkit.nl.translate.TranslatorOptions
@@ -92,21 +98,35 @@ import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import java.io.IOException
 import java.util.Locale
 import java.util.Objects
-import java.util.concurrent.TimeUnit
 
 
 class MainActivity:  AppCompatActivity(){
+
     private var sessionDepth = 0
     var app_names = arrayOf("whatsapp,youtube,browser")
     val NEW_SPINNER_ID = 1
+    private var token="";
+    private var deviceId="";
+    private val SMS_PERMISSION_REQUEST_CODE = 123
+    private var userEmail="";
+    private lateinit var secureTokenManager: SecureTokenManager
+    private lateinit var layout: View
+    private lateinit var interpretButton:Button
     private val USAGE_ACCESS_REQUEST_CODE = 1
     private lateinit var accessibilityService: MyAccessibilityService<Any?>
-    private var tv_Speech_to_text: TextView? = null
+    private var smsReceiver: SmsListener? = null
+    val smsFilter = IntentFilter("android.provider.Telephony.SMS_RECEIVED")
+
 
     private var progressDialog: ProgressDialog? = null
     var language:String ="en-US"
     var sourcelanguage="TAMIL"
     var selectedLanguage="Choose language";
+    //    private fun getAndroidId(context: Context): String {
+//        retrun
+//    }
+//    var id= "";
+    var ReadyFlag=false;
 
     val str:String=""
     private val REQUEST_CODE_SPEECH_INPUT = 1
@@ -118,6 +138,13 @@ class MainActivity:  AppCompatActivity(){
         .build()
     var englishGermanTranslator = Translation.getClient(options)
     private var alertDialog: AlertDialog? = null
+    private var accessibilityAlert: AlertDialog? = null
+    private var userselectedApp="";
+
+//    fun onOptionsItemSelected(item: MenuItem?) {
+//        val log = LoggerFactory.getLogger(MainActivity::class.java)
+//        log.info("hello world")
+//    }
 
 
     //Image to text
@@ -133,17 +160,74 @@ class MainActivity:  AppCompatActivity(){
     var textRecognizer: TextRecognizer =
         TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
     private fun isCameraPermissionGranted(): Boolean {
+        Bugfender.d("MainActivity","isCameraPermissionGranted");
         return ContextCompat.checkSelfPermission(
             this,
             Manifest.permission.CAMERA
         ) == PackageManager.PERMISSION_GRANTED
+        Bugfender.d("isCameraPermissionGranted",(ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.CAMERA
+        ) == PackageManager.PERMISSION_GRANTED).toString());
     }
+
+
+    private var mRequestQueue: RequestQueue? = null
+    private var mStringRequest: StringRequest? = null
+    private fun getData(url: String) {
+        println("yessssssssssssssssssssssssssssjbhvbdhbvhjbjdbhfg")
+
+        // RequestQueue initialized
+        mRequestQueue = Volley.newRequestQueue(this)
+
+        // String Request initialized
+        mStringRequest = object : StringRequest(Request.Method.GET, url,
+            { response ->
+                // This code will be executed upon a successful response
+                println("response got from server")
+                println(response)
+                Bugfender.d("getData","respoonse from Server: $response");
+            },
+            { error ->
+                println(error)
+//                if(error.networkResponse.statusCode!=null) {
+//                    if (error!!.networkResponse!!.statusCode.toString() == "401") {
+//                        sessionAlert(this@MainActivity);
+//                    }
+//                }
+//                Log.i(ContentValues.TAG, "Error: ${error.networkResponse.statusCode}")
+                Bugfender.d("getData","error from Server: $error");
+            }) {
+            override fun parseNetworkResponse(response: NetworkResponse): Response<String> {
+                val statusCode = response.statusCode
+                println("resssssssssssssssssssponssssssssssssseeeeeee code");
+                println("Response Code: $statusCode")
+                if(statusCode.toString()=="401")
+                {
+                    sessionAlert(this@MainActivity);
+                }
+                return super.parseNetworkResponse(response)
+            }
+        }
+
+        mRequestQueue!!.add(mStringRequest)
+    }
+
+
+
+
+
+    // Example of how to use the function
+
+
 
 
 
     val profanityList = Globals.profanityList
 
     fun sanitizeText(text: String): String {
+        Bugfender.d("MainActivity","sanitizeText");
+        Bugfender.d("sanitizeText",text);
         var text0= text.lowercase(Locale.ROOT)
         var sanitizedText = text0
         for (word in profanityList) {
@@ -151,10 +235,90 @@ class MainActivity:  AppCompatActivity(){
             sanitizedText = sanitizedText.replace(Regex("(?i)\\b$word\\b"), replacement)
             sanitizedText = sanitizedText.replace(Regex("(?i)\\n$word\\n"), replacement)
         }
-        println("sanitized"+sanitizedText);
+        Bugfender.d("sanitizeText",sanitizedText);
         return sanitizedText
     }
     val context=this;
+    private fun showAccessibilityPermissionDialog(packageName:String) {
+        Bugfender.d("MainActivity","showAccessibilityPermissionDialog");
+        val accessibility_dialogView = layoutInflater.inflate(R.layout.accessibility_permission, null)
+        val dialogTitle = accessibility_dialogView.findViewById<TextView>(R.id.dialogTitle)
+        val dialogMessage = accessibility_dialogView.findViewById<TextView>(R.id.dialogMessage)
+        val btnGrantPermission = accessibility_dialogView.findViewById<Button>(R.id.btnGrantPermission)
+        val btnCancel = accessibility_dialogView.findViewById<Button>(R.id.btnCancel)
+
+        dialogTitle.text = "Accessibility Permission Required"
+        dialogMessage.text = "Please grant accessibility permission to open the app!"
+
+        val builder = AlertDialog.Builder(this)
+        builder.setView(accessibility_dialogView)
+        accessibilityAlert = builder.create()
+        userselectedApp=packageName;
+        val enabled = isAccessibilityServiceEnabled(MyAccessibilityService::class.java)
+        if (enabled) {
+            Bugfender.d("showAccessibilityPermissionDialog","enabled");
+            accessibilityAlert?.dismiss()
+            accessibilityAlert=null;
+        }
+        accessibilityAlert?.setOnDismissListener {
+            accessibilityAlert=null;
+        }
+
+        btnGrantPermission.setOnClickListener {
+            Bugfender.d("showAccessibilityPermissionDialog","btnGrantPermission");
+            openAccessibilitySettings()
+            val enabled = isAccessibilityServiceEnabled(MyAccessibilityService::class.java)
+            if (enabled) {
+                accessibilityAlert?.dismiss()
+                accessibilityAlert=null;
+                Bugfender.d("showAccessibilityPermissionDialog","enabled accessibilityAlert?.dismiss()");
+            }
+        }
+
+        btnCancel.setOnClickListener {
+            Bugfender.d("showAccessibilityPermissionDialog","accessibilityAlert?.dismiss()");
+            accessibilityAlert?.dismiss()
+            accessibilityAlert=null;
+        }
+        accessibilityAlert?.show()
+    }
+    private fun requestCameraPermission() {
+        Bugfender.d("MainActivity","requestCameraPermission");
+        ActivityCompat.requestPermissions(
+            this,
+            arrayOf(Manifest.permission.CAMERA),
+            CAMERA_PERMISSION_REQUEST_CODE
+        )
+    }
+
+
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        Bugfender.d("MainActivity","onRequestPermissionsResult");
+        if (requestCode == CAMERA_PERMISSION_REQUEST_CODE) {
+            Bugfender.d("onRequestPermissionsResult","requestCode==CAMERA_PERMISSION_REQUEST_CODE");
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                Bugfender.d("onRequestPermissionsResult","true");
+                // Camera permission granted, call the openCamera() function
+                PickImageCamera()
+            } else {
+                Bugfender.d("onRequestPermissionsResult","false");
+            }
+        }
+        if (requestCode == SMS_PERMISSION_REQUEST_CODE) {
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                // Permission granted, set up the CheckBox listener
+                setUpCheckBoxListener()
+            } else {
+                // Permission denied, handle accordingly (e.g., inform the user)
+            }
+        }
+    }
     fun isAccessibilityServiceEnabled(
         service: Class<out AccessibilityService?>
     ): Boolean {
@@ -170,54 +334,71 @@ class MainActivity:  AppCompatActivity(){
         }
         return false
     }
+    fun getAppNameFromPackageName(context: Context, packageName: String): String {
+        Bugfender.d("MainActivity","getAppNameFromPackageName");
+        val packageManager: PackageManager = context.packageManager
+        try {
+            Bugfender.d("getAppNameFromPackageName","try");
+            val applicationInfo: ApplicationInfo = packageManager.getApplicationInfo(packageName, 0)
+            Bugfender.d("getAppNameFromPackageName",packageManager.getApplicationLabel(applicationInfo).toString());
+            return packageManager.getApplicationLabel(applicationInfo).toString()
+        } catch (e: PackageManager.NameNotFoundException) {
+            Bugfender.e("getAppNameFromPackageName",e.printStackTrace().toString())
+            e.printStackTrace()
+        }
+        return ""
+    }
+    private fun showCustomAlertDialog(packageName: String) {
+        Bugfender.d("MainActivity","showCustomAlertDialog");
+        val dialogView = layoutInflater.inflate(R.layout.openappalert, null)
+        val dialogTitle = dialogView.findViewById<TextView>(R.id.openApp_dialogTitle)
 
-    private fun showAccessibilityPermissionDialog() {
-        val dialogView = layoutInflater.inflate(R.layout.accessibility_permission, null)
-        val dialogTitle = dialogView.findViewById<TextView>(R.id.dialogTitle)
-        val dialogMessage = dialogView.findViewById<TextView>(R.id.dialogMessage)
-        val btnGrantPermission = dialogView.findViewById<Button>(R.id.btnGrantPermission)
-        val btnCancel = dialogView.findViewById<Button>(R.id.btnCancel)
+        val btnYes = dialogView.findViewById<Button>(R.id.btnYes)
+        val btnNo = dialogView.findViewById<Button>(R.id.btnNo)
+        var appName=getAppNameFromPackageName(this,packageName);
 
-        dialogTitle.text = "Accessibility Permission Required"
-        dialogMessage.text = "Please grant accessibility permission to open the app."
+        dialogTitle.text = "Do you wish to open $appName with Let'sTalkSign interpretation?"
 
         val builder = AlertDialog.Builder(this)
         builder.setView(dialogView)
-        val alertDialog = builder.create()
+        val customAlertDialog = builder.create()
 
-        btnGrantPermission.setOnClickListener {
-            openAccessibilitySettings()
-            alertDialog.dismiss()
+        btnYes.setOnClickListener {
+            Bugfender.d("showCustomAlertDialog","btnYes");
+            openApp(packageName);
+
+            // Handle "Yes" button click
+            // You can implement the desired action here
+            customAlertDialog.dismiss()
         }
 
-        btnCancel.setOnClickListener {
-            alertDialog.dismiss()
+        btnNo.setOnClickListener {
+            Bugfender.d("showCustomAlertDialog","btnNo");
+            // Handle "No" button click
+            // You can implement the desired action here
+            customAlertDialog.dismiss()
         }
 
-        alertDialog.show()
-    }
-
-
-    private fun requestCameraPermission() {
-        ActivityCompat.requestPermissions(
-            this,
-            arrayOf(Manifest.permission.CAMERA),
-            CAMERA_PERMISSION_REQUEST_CODE
-        )
+        customAlertDialog.show()
     }
 
     private fun PickImageCamera() {
+        Bugfender.d("MainActivity","Pick Image  from camera");
         val values = ContentValues()
         values.put(MediaStore.Images.Media.TITLE, "Image")
         values.put(MediaStore.Images.Media.DESCRIPTION, "Description")
         imageUri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+        Bugfender.d("PickImageCamera",imageUri.toString());
         val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
+        Bugfender.d("PickImageCamera","intent"+intent.toString());
         intent.putExtra(MediaStore.EXTRA_OUTPUT, imageUri)
         cameraActivityResultLauncher.launch(intent)
     }
     private fun recogniserImage(myId: Int,imageUri:Uri) {
-
+        Bugfender.d("MainActivity","recogniserImage");
+        Bugfender.d("recogniserImage",imageUri.toString());
         try {
+            Bugfender.d("recogniserImage","Try");
             val inputImage = InputImage.fromFilePath(this, imageUri)
             //  progress.setMessage("Text...")
 
@@ -227,11 +408,15 @@ class MainActivity:  AppCompatActivity(){
                     val resultText = text.text
                     println("tttttttttttttttexxxxxxxxxxxxxxxxxxxxxt");
                     println(resultText);
-                //    recognisedText.text = resultText;
+                    //    recognisedText.text = resultText;
                     showPopupWithEditText(resultText,"Scanned Text");
                     // Do something with the recognized text (resultText)
                 }
-        } catch (e: IOException) {
+        }
+        catch (e: IOException) {
+            Bugfender.d("recogniserImage","catch");
+            Bugfender.e("recogniserImage",e.toString());
+            Bugfender.d("recogniserImage","Exception");
             Toast.makeText(this@MainActivity, "Failed", Toast.LENGTH_LONG).show()
             e.printStackTrace()
         }
@@ -240,20 +425,27 @@ class MainActivity:  AppCompatActivity(){
 
 
     private fun pickImageGallery() {
+        Bugfender.d("MainActivity","pickImageGallery");
         val intent = Intent(Intent.ACTION_PICK)
         intent.type = "image/*"
+        Bugfender.d("pickImageGallery",intent.toString());
         galleryActivityLauncher.launch(intent)
     }
 
+
+
     fun isServiceRunning(context: Context, serviceClass: Class<*>): Boolean {
+        Bugfender.d("MainActivity","isServiceRunning");
         val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
         val runningServices = activityManager.getRunningServices(Integer.MAX_VALUE)
 
         for (service in runningServices) {
             if (serviceClass.name == service.service.className) {
+                Bugfender.d("isServiceRunning","true");
                 return true
             }
         }
+        Bugfender.d("isServiceRunning","false");
         return false
     }
 
@@ -265,21 +457,29 @@ class MainActivity:  AppCompatActivity(){
     }
 
     private fun showLogoutAlert() {
+        Bugfender.d("MainActivity","showLogoutAlert");
         val builder = AlertDialog.Builder(this)
 
         builder.setTitle("Logout")
         builder.setMessage("Are you sure you want to logout?")
 
         builder.setPositiveButton("Yes") { _: DialogInterface, _: Int ->
+            Bugfender.d("showLogoutAlert","Yes");
+            val sharedPreferences = getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
+            val editor = sharedPreferences.edit()
+            editor.clear()
+            editor.apply()
             mGoogleSignInClient.signOut().addOnCompleteListener {
                 val intent = Intent(this, Signin_page::class.java)
-                Toast.makeText(this, "Logging Out", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Logging Out", Toast.LENGTH_SHORT).show();
+                getData("https://trrain4-web.letstalksign.org/app_log?mode=logout&customer_id=10009&device_id=$deviceId&gmail_id=$userEmail&token=$token");
                 startActivity(intent)
                 finish()
             }
         }
 
         builder.setNegativeButton("Cancel") { dialog: DialogInterface, _: Int ->
+            Bugfender.d("showLogoutAlert","Cancel");
             dialog.dismiss()
         }
 
@@ -287,94 +487,239 @@ class MainActivity:  AppCompatActivity(){
         alertDialog.show()
     }
 
+
+
     private fun getProfilePicUri(): String? {
+        Bugfender.d("MainActivity","getProfilePicUri");
         val sharedPreferences = getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
+        Bugfender.d("MainActivity",sharedPreferences.getString("PROFILE_PIC_URI", null));
         return sharedPreferences.getString("PROFILE_PIC_URI", null)
+    }
+
+    val sessionMsg = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val sms = intent.extras?.getString("session_message")
+            println("session Messagekdcnnjndcjndjnjcdnjcdnjc");
+            if(sms=="ready")
+            {
+                ReadyFlag=true;
+                interpretButton.setText("Interpret");
+                interpretButton.isEnabled=true;
+            }
+        }
+    }
+    val missingAnimation = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val word = intent.extras?.getString("missingAnimations")
+            println("session Messagekdcnnjndcjndjnjcdnjcdnjc");
+            if(word!="" || word.isNotEmpty())
+            {
+//                getData("https://trrain4-web.letstalksign.org/app_log?mode=logout&customer_id=10009&device_id=$deviceId&gmail_id=$userEmail&token=$token");
+                getData("https://trrain4-web.letstalksign.org/app_log?mode=missing_animation&word=$word&customer_id=10009&device_id=$deviceId&gmail_id=$userEmail&token=$token")
+            }
+        }
     }
     override fun onStart() {
         super.onStart()
+        layout = layoutInflater.inflate(R.layout.popup_layout, null)
+
+        // Initialize other properties
+        interpretButton = layout.findViewById(R.id.interpretButton)
         sessionDepth++
         if (sessionDepth == 1) {
-            println("fffffffffwwwwwwwwwwwwwwwwwwwwwwwdddddddddddddddd");
+            val accessibilityStatusTextView: TextView = findViewById(R.id.access_permission)
+            val home_stopbutton:com.google.android.material.floatingactionbutton.FloatingActionButton=findViewById(R.id.home_myButton)
+            val help_stopbutton:com.google.android.material.floatingactionbutton.FloatingActionButton=findViewById(R.id.help_myButton)
+            val stopbutton:com.google.android.material.floatingactionbutton.FloatingActionButton=findViewById(R.id.myButton);
+
+            val enabled = isAccessibilityServiceEnabled(MyAccessibilityService::class.java)
+            if(enabled)
+            {
+                accessibilityStatusTextView.text = "Granted"
+                accessibilityStatusTextView.setTextColor(Color.parseColor("#00FF00"))
+                if(stopbutton.visibility==View.GONE) {
+                    stopbutton.visibility = View.VISIBLE;
+                    help_stopbutton.visibility=View.VISIBLE;
+                    home_stopbutton.visibility=View.VISIBLE
+                }
+            }
+            else if(!enabled)
+            {
+                accessibilityStatusTextView.text = "Not Granted"
+                accessibilityStatusTextView.setTextColor(Color.parseColor("#FF0000"))
+                if(stopbutton.visibility==View.VISIBLE) {
+                    stopbutton.visibility = View.GONE;
+                    help_stopbutton.visibility = View.GONE;
+                    home_stopbutton.visibility = View.GONE;
+                }
+            }
+            Bugfender.d("MainActivity","foreground session");
+            println("app is in foreground");
             val isFloatingWindowServiceRunning = isServiceRunning(this, FloatingWindowGFG::class.java)
             if (isFloatingWindowServiceRunning) {
-                println("heeeeeeeeeellooooooooooo");
+                println("Floating service is running");
+                Bugfender.d("forward","Floating service is running");
                 // Stop the service
                 val intent = Intent("stop_action_overlay")
                 intent.putExtra("stop_message_overlay", "stop")
                 sendBroadcast(intent);
+                Bugfender.d("forward","broadcast is sent");
 //                val myService = Intent(this@MainActivity, FloatingWindowGFG::class.java)
 //                stopService(myService);
             }
             else{
-                println("nooooooooooooooooooooooooooooooooooooooo");
+                Bugfender.d("MainActivity","not in foreground");
+                println("not in foreground");
+            }
+            if(accessibilityAlert!=null)
+            {
+                Bugfender.d("forward","accessibilityAlert!=null");
+                accessibilityAlert!!.dismiss()
+                accessibilityAlert=null;
+                val enabled = isAccessibilityServiceEnabled(MyAccessibilityService::class.java)
+                if (enabled) {
+                    Bugfender.d("forward","enabled accessibilityAlert!=null ");
+                    // Call your function here
+                    showCustomAlertDialog(userselectedApp);
+                }
+            }
+            if(alertDialog==null &&  (!hasUsageAccessPermission() || !hasOverlayPermission())) {
+                Bugfender.d("forward","requestUsageAccessPermission");
+                requestUsageAccessPermission();
+            }
+            if(alertDialog!=null && hasUsageAccessPermission() && hasOverlayPermission())
+            {
+                Bugfender.d("forward"," alertDialog?.dismiss();");
+                alertDialog?.dismiss();
+                alertDialog=null;
+            }
+            if(alertDialog!=null && (!hasOverlayPermission() || !hasUsageAccessPermission()))
+            {
+                Bugfender.d("forward","if alertDialog?.dismiss();");
+//                alertDialog?.dismiss();
+//                alertDialog=null;
+                requestUsageAccessPermission();
             }
         }
     }
 
-    @SuppressLint("MissingInflatedId", "WrongViewCast", "ResourceType")
+    @SuppressLint("MissingInflatedId", "WrongViewCast", "ResourceType", "JavascriptInterface")
     override fun onCreate(savedInstanceState: Bundle?) {
+
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO);
         super.onCreate(savedInstanceState)
         setContentView(R.layout.help_page)
-        val accessibilityStatusTextView: TextView = findViewById(R.id.access_permission)
+//        val intent = Intent(this, RazorpayPayment::class.java)
+//        startActivity(intent);
+        // Permission is not granted, request it
+        layout = layoutInflater.inflate(R.layout.popup_layout, null)
+
+        // Initialize other properties
+        interpretButton = layout.findViewById(R.id.interpretButton)
+        registerReceiver(sessionMsg, IntentFilter("session_message"))
+        registerReceiver(missingAnimation, IntentFilter("missingAnimations"));
+        val sharedPreferences0 = getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
+        val editor0 = sharedPreferences0.edit()
+        editor0.putBoolean("SMSservice", false)
+        editor0.apply()
+        secureTokenManager = SecureTokenManager(this)
+        deviceId= secureTokenManager.loadId().toString();
+        userEmail=secureTokenManager.loadEmail().toString()
+        token=secureTokenManager.loadToken().toString();
         val home_stopbutton:com.google.android.material.floatingactionbutton.FloatingActionButton=findViewById(R.id.home_myButton)
         val help_stopbutton:com.google.android.material.floatingactionbutton.FloatingActionButton=findViewById(R.id.help_myButton)
         val stopbutton:com.google.android.material.floatingactionbutton.FloatingActionButton=findViewById(R.id.myButton);
+        val accessibilityStatusTextView: TextView = findViewById(R.id.access_permission)
+        println("jsvdcghsvdvscghvshdvgcsh");
+        var tv_Speech_to_text = findViewById<TextView>(R.id.webview_text);
+        val webviewTitle:TextView=findViewById(R.id.title_webview_text);
+        val checkBox = findViewById<CheckBox>(R.id.SMSCheckBox);
+        val SMSPermission=(ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.READ_SMS
+        ) == PackageManager.PERMISSION_GRANTED);
+        if(SMSPermission) {
+            checkBox.isChecked = true;
+            editor0.putBoolean("SMSservice", true)
+            editor0.apply()
+        }
+        else {
+            checkBox.isChecked = false;
+            editor0.putBoolean("SMSservice", false)
+            editor0.apply()
+        }
+        checkBox.setOnClickListener{
+            if(checkBox.isChecked)
+            {
+                println("checkeddddddddddddddddd");
+                if (ContextCompat.checkSelfPermission(
+                        this,
+                        Manifest.permission.READ_SMS
+                    ) != PackageManager.PERMISSION_GRANTED
+                ) {
+                    val intent = Intent(this, PermissionsRequestActivity::class.java)
+                    startActivityForResult(intent, PermissionsRequestActivity.READ_SMS_PERMISSION_REQUEST_CODE)
+                    // Permission is not granted, request it
+                } else {
+                    // Permission is already granted, set up the CheckBox listener
+                    setUpCheckBoxListener()
+                }
+            }
+            else
+            {
+                val sharedPreferences = getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
+                val editor = sharedPreferences.edit()
+                editor.putBoolean("SMSservice", false)
+                editor.apply()
+            }
+            println("clickedddddddddddddddddddd");
+        }
+
         val handler0=Handler();
 
-        fun startListeningAccessibiility() {
-            handler0.postDelayed(object : Runnable {
-
-                override fun run() {
-                    val enabled = isAccessibilityServiceEnabled(
-                        MyAccessibilityService::class.java
-                    )
-                    if(enabled)
-                    {
-                        accessibilityStatusTextView.text = "Granted"
-                        accessibilityStatusTextView.setTextColor(Color.parseColor("#00FF00"))
-                        if(stopbutton.visibility==View.GONE) {
-                            stopbutton.visibility = View.VISIBLE;
-                            help_stopbutton.visibility=View.VISIBLE;
-                            home_stopbutton.visibility=View.VISIBLE
-                        }
-
-                    }
-                    else
-                    {
-                        accessibilityStatusTextView.text = "Not Granted"
-                        accessibilityStatusTextView.setTextColor(Color.parseColor("#FF0000"))
-                        if(stopbutton.visibility==View.VISIBLE)
-                            stopbutton.visibility=View.GONE;
-                            help_stopbutton.visibility=View.GONE;
-                            home_stopbutton.visibility=View.GONE;
-                    }
-                    handler0.postDelayed(this, 100)
-                }
-            }, 0)
-
-        }
         stopbutton.setOnClickListener {
-            println("heeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeelllllllllllllllloooooooooo");
-                val intent = Intent("stop_action")
-                intent.putExtra("stop_message", "stop")
-                sendBroadcast(intent)
+            if(stopbutton.visibility==View.VISIBLE) {
+                stopbutton.visibility = View.GONE;
+                help_stopbutton.visibility = View.GONE;
+                home_stopbutton.visibility = View.GONE;
+            }
+            Bugfender.d("MainActivity","stopbutton");
+            println("Stop Button Clicked")
+            val intent = Intent("stop_action")
+            intent.putExtra("stop_message", "stop")
+            sendBroadcast(intent)
+            Bugfender.d("stopbutton","sendBroadcast");
         }
         home_stopbutton.setOnClickListener{
-            println("heeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeelllllllllllllllloooooooooo");
+            if(home_stopbutton.visibility==View.VISIBLE) {
+                stopbutton.visibility = View.GONE;
+                help_stopbutton.visibility = View.GONE;
+                home_stopbutton.visibility = View.GONE;
+            }
+            Bugfender.d("MainActivity","home_stopbutton");
+            println("home_stopbutton");
             val intent = Intent("stop_action")
             intent.putExtra("stop_message", "stop")
-            sendBroadcast(intent)
+            sendBroadcast(intent);
+            Bugfender.d("home_stopbutton","sendBroadcast");
         }
         help_stopbutton.setOnClickListener {
-            println("heeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeelllllllllllllllloooooooooo");
+            if(help_stopbutton.visibility==View.VISIBLE) {
+                stopbutton.visibility = View.GONE;
+                help_stopbutton.visibility = View.GONE;
+                home_stopbutton.visibility = View.GONE;
+            }
+            Bugfender.d("MainActivity","help_stopbutton");
+            println("help_stopbutton");
             val intent = Intent("stop_action")
             intent.putExtra("stop_message", "stop")
             sendBroadcast(intent)
+            Bugfender.d("help_stopbutton","sendBroadcast");
         }
         fun disableAccessibilityService(context: Context, serviceClass: Class<out AccessibilityService>) {
+            Bugfender.d("MainActivity","disableAccessibilityService");
             try {
+                Bugfender.d("disableAccessibilityService","try");
                 val componentName = ComponentName(context, serviceClass)
                 Settings.Secure.putString(
                     context.contentResolver,
@@ -388,13 +733,13 @@ class MainActivity:  AppCompatActivity(){
                     "0"
                 )
             } catch (e: Exception) {
+                Bugfender.e("disableAccessibilityService",e.toString());
                 e.printStackTrace()
             }
         }
 
-//        disableAccessibilityService(this, YourAccessibilityService::class.java)
-        startListeningAccessibiility();
         fun openDrawer() {
+            Bugfender.d("MainActivity","openDrawer");
             val drawerLayout = findViewById<DrawerLayout>(R.id.my_drawer_layout)
             drawerLayout.openDrawer(GravityCompat.END)
         }
@@ -409,95 +754,123 @@ class MainActivity:  AppCompatActivity(){
 
 
         val profilePicUriString = intent.getStringExtra("profilepic");
-//        if()
-//        var profilePicUri = Uri.parse(profilePicUriString)
         var profilePicUri="";
         if(getProfilePicUri()!=null)
             profilePicUri = Uri.parse(getProfilePicUri()).toString();
         val imageViewProfilePicture = findViewById<ImageView>(R.id.profile_ic)
         if (profilePicUri != null) {
-            println("prrrrrrrroooooooooooo"+profilePicUri);
+            Bugfender.d("MainActivity","profilePicUri");
+            Bugfender.d("profilePicUri",profilePicUri);
+            println("profile pic uri-"+profilePicUri);
             Glide.with(this)
                 .load(profilePicUri)
                 .placeholder(R.drawable.ic_profile) // Placeholder image while loading
                 .error(R.drawable.ic_profile) // Error image if loading fails
                 .transition(DrawableTransitionOptions.withCrossFade())
                 .into(imageViewProfilePicture)
-
-
         }
         imageViewProfilePicture.setOnClickListener {
+            Bugfender.d("MainActivity","imageViewProfilePicture");
             openDrawer();
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             if (accessibilityManager.isEnabled) {
-                // Accessibility granted
+                Bugfender.d("MainActivity","accessibilityManager.isEnabled");
                 accessibilityStatusTextView.text = "Granted"
                 accessibilityStatusTextView.setTextColor(Color.parseColor("#00FF00"))
             } else {
-                // Accessibility not granted
+                Bugfender.d("MainActivity","NOTaccessibilityManager.isEnabled");
                 accessibilityStatusTextView.text = "Not Granted"
                 accessibilityStatusTextView.setTextColor(Color.parseColor("#FF0000"))
             }
         }
-        //image to text
 
-//        val logoutButton:ImageView =findViewById(R.id.logout_ic)
-//        logoutButton.setOnClickListener {
-//            showLogoutAlert()
-//
-//        }
-
-
-
-
-//        val scanbutton =findViewById<Button>(R.id.webview_scan_ic);
         val scanButton =findViewById<ImageView>(R.id.webview_scan_ic);
 
         galleryActivityLauncher = registerForActivityResult(
             ActivityResultContracts.StartActivityForResult()
         ) { result ->
             if (result.resultCode == Activity.RESULT_OK) {
-                // Handle the result here
                 val data: Intent? = result.data
-                // Extract data from the intent as needed
             }
         }
 
         cameraActivityResultLauncher = registerForActivityResult(
             ActivityResultContracts.StartActivityForResult()
         ) { result ->
+            Bugfender.d("Scan","Camera activity launcher");
+            Bugfender.d("ScanResult",result.toString());
+            Bugfender.d("ScanResult",result.resultCode.toString()+imageUri.toString());
+
             if (result.resultCode == Activity.RESULT_OK) {
+                Bugfender.d("ImageOK",imageUri.toString());
                 imageUri?.let { recogniserImage(0, it) };
                 // Handle the result here
                 // The captured image is usually available via the 'imageUri' property
             }
+            else
+            {
+                Bugfender.e("ScanError",result.toString());
+            }
         }
-//        captureImage.setOnClickListener{
-//            pickImageGallery();
-//        }
 
 
         fun exampleCheckCameraPermission() {
+            Bugfender.d("MainActivity","exampleCheckCameraPermission");
             if (isCameraPermissionGranted()) {
+                Bugfender.d("exampleCheckCameraPermission","isCameraPermissionGranted()");
                 // Camera permission is already granted, proceed with camera-related operations
             } else {
                 // Camera permission is not granted, request it
+                Bugfender.d("exampleCheckCameraPermission","NOTisCameraPermissionGranted()");
                 requestCameraPermission()
             }
         }
 
         scanButton.setOnClickListener{
+            Bugfender.d("MainActivity","scanButton");
+            getData("https://trrain4-web.letstalksign.org/app_log?mode=scan_opened&language=english&customer_id=10009&device_id=$deviceId&gmail_id=$userEmail&token=$token")
+            webviewTitle.setText("Scanned Text:");
+            val text_button: ImageView = findViewById(R.id.webview_text_ic)
+            val text_title: TextView = findViewById(R.id.texttitle)
+            text_title.setTextSize(15F)
+            fun dpToPx(dp: Int): Int {
+                val density = resources.displayMetrics.density
+                return (dp * density).toInt()
+            }
+            text_button.layoutParams.height=dpToPx(35);
+            text_button.layoutParams.width=dpToPx(35);
+
+            val mic_button: ImageView = findViewById(R.id.webview_mic_ic)
+            val mic_title: TextView = findViewById(R.id.speakTitle)
+            mic_title.setTextSize(15F)
+            mic_button.layoutParams.height=dpToPx(35) // Increase height by 10dp
+            mic_button.layoutParams.width=dpToPx(35)
+
+            val scan_button: ImageView = findViewById(R.id.webview_scan_ic)
+            val scan_title: TextView = findViewById(R.id.scanTitle)
+            scan_title.setTextSize(18F)
+            scan_button.layoutParams.height=dpToPx(42)
+            scan_button.layoutParams.width=dpToPx(42)
+            tv_Speech_to_text.setText("Click the scan button above to scan text and initiate interpretation.")
             if(selectedLanguage!="English")
             {
-                showLanguageNotSupportedDialog(this@MainActivity);
+                Bugfender.d("Scan","Not English")
+                showLanguageNotSupportedDialog(this);
             }
-            else {
-                if (isCameraPermissionGranted())
+            else
+            {
+
+                if (isCameraPermissionGranted()) {
+                    Bugfender.d("Scan","camera permission granted");
                     PickImageCamera();
-                else
+                }
+                else {
+                    Bugfender.d("Scan","camera permission Not granted");
                     requestCameraPermission()
+                }
             }
+
         }
 
 
@@ -531,19 +904,11 @@ class MainActivity:  AppCompatActivity(){
         val searchview:SearchView =findViewById(R.id.searchView);
         val scale = resources.displayMetrics.density
 
-        fun openApp(packageName: String) {
-            val packageManager = this.packageManager
-            // Check if app is installed
-            val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
-            if (launchIntent != null) {
-                startActivity(launchIntent)
-            } else {
-                // App not found or not installed
-                Toast.makeText(this, "App not found: $packageName", Toast.LENGTH_SHORT).show()
-            }
-        }
+
 
         listView.setOnTouchListener(OnTouchListener { v, event ->
+            Bugfender.d("MainActivity","listView.setOnTouchListener");
+            Bugfender.d("listView.setOnTouchListener",event.toString());
             scrollview.requestDisallowInterceptTouchEvent(true)
             val action = event.actionMasked
             when (action) {
@@ -563,6 +928,7 @@ class MainActivity:  AppCompatActivity(){
         var sortedAppInfos = mutableListOf<AppInfo>()
 
         for (packageInfo in packages) {
+
             val isChromeOrYouTube = packageInfo.packageName == "com.android.chrome" ||
                     packageInfo.packageName == "com.google.android.youtube"
             if ((packageInfo.flags and ApplicationInfo.FLAG_SYSTEM) == 0 || isChromeOrYouTube) {
@@ -580,20 +946,23 @@ class MainActivity:  AppCompatActivity(){
         fun otherApps() {
             listView.adapter = adapter
             listView.setOnItemClickListener { _, _, position, _ ->
+                Bugfender.d("listView.setOnItemClickListener",adapter.getItem(position).toString());
                 val selectedAppInfo = adapter.getItem(position)
                 if (selectedAppInfo != null) {
                     val selectedPackageName = selectedAppInfo.packageName
                     if (selectedPackageName != null) {
+                        Bugfender.d("listView.setOnItemClickListener",selectedPackageName.toString());
                         val enabled = isAccessibilityServiceEnabled(MyAccessibilityService::class.java)
                         if (!enabled) {
                             // Accessibility not granted
-                            showAccessibilityPermissionDialog()
+                            showAccessibilityPermissionDialog(selectedPackageName)
                         } else {
                             openApp(selectedPackageName)
                             val isFloatingWindowServiceRunning =
                                 isServiceRunning(this, FloatingWindowGFG::class.java)
                             if (!isFloatingWindowServiceRunning) {
-                                println("heeeeeeeeeeeeeeeelooooooooooodnsj")
+                                Bugfender.d("listView.setOnItemClickListener","floating window not running");
+                                println("floating window not running")
                                 val intent = Intent(this, FloatingWindowGFG::class.java)
                                 intent.putExtra(
                                     "message",
@@ -603,11 +972,13 @@ class MainActivity:  AppCompatActivity(){
                                 startService(intent)
                             }
                             else {
+                                Bugfender.d("listView.setOnItemClickListener","floating window running");
                                 // Process the event or text as needed
-                                println("mmmmmmmmmmmmmmmmdcvdghvhcdvhgv");
+                                println("Floating window service is running");
                                 val intent = Intent("SendMessage")
                                 intent.putExtra("SendMessage","Hello Im Arya, Im here to interpret for you!");
                                 sendBroadcast(intent)
+                                Bugfender.d("listView.setOnItemClickListener","sendBroadcast");
 //                                val intent0 = Intent("stop_action_overlay")
 //                                intent0.putExtra("stop_message_overlay", "start")
 //                                sendBroadcast(intent0)
@@ -635,12 +1006,14 @@ class MainActivity:  AppCompatActivity(){
 
 
         fun getAppIcon(packageName: String): Drawable? {
+            Bugfender.e("MainActivity","getAppIcon");
             return try {
                 val packageManager = packageManager
                 val applicationInfo = packageManager.getApplicationInfo(packageName, 0)
                 packageManager.getApplicationIcon(applicationInfo)
             } catch (e: PackageManager.NameNotFoundException) {
-                println("errrrrrrrrrrrrrrrrreeeeeeeeeeeeeeeeeeeeeerrrrrrrrrrrrr");
+                Bugfender.e("getAppIcon",e.toString());
+                println("error - getAppIcon");
                 // Handle exception or return null as a fallback
                 null
             }
@@ -648,7 +1021,9 @@ class MainActivity:  AppCompatActivity(){
 
         fun recentappsPermission()
         {
+            Bugfender.d("MainActivity","recentappsPermission");
             if (hasUsageAccessPermission()) {
+                Bugfender.d("recentappsPermission","hasUsageAccessPermission");
                 val usageStatsManager = getSystemService(USAGE_STATS_SERVICE) as UsageStatsManager
                 val currentTime = System.currentTimeMillis()
                 val startTime = currentTime - 24 * 60 * 60 * 1000 // 24 hours ago
@@ -678,6 +1053,7 @@ class MainActivity:  AppCompatActivity(){
                 text6.text = getAppName(nonSystemApps[5].packageName.toString());
 
                 text1.setOnClickListener {
+                    Bugfender.d("MainActivity","text1");
                     val enabled = isAccessibilityServiceEnabled(
                         MyAccessibilityService::class.java
                     )
@@ -687,13 +1063,14 @@ class MainActivity:  AppCompatActivity(){
                     }
                     else if (!enabled) {
                         // Accessibility granted
-                        showAccessibilityPermissionDialog()
+                        showAccessibilityPermissionDialog(nonSystemApps[0].packageName.toString())
                     }
                     else
                         openApp(nonSystemApps[0].packageName.toString())
                 }
 
                 text2.setOnClickListener {
+                    Bugfender.d("MainActivity","text2");
                     val enabled = isAccessibilityServiceEnabled(
                         MyAccessibilityService::class.java
                     )
@@ -703,12 +1080,13 @@ class MainActivity:  AppCompatActivity(){
                     }
                     else if (!enabled) {
                         // Accessibility granted
-                        showAccessibilityPermissionDialog()
+                        showAccessibilityPermissionDialog(nonSystemApps[1].packageName.toString())
                     }
                     else
                         openApp(nonSystemApps[1].packageName.toString())
                 }
                 text3.setOnClickListener {
+                    Bugfender.d("MainActivity","text3");
                     val enabled = isAccessibilityServiceEnabled(
                         MyAccessibilityService::class.java
                     )
@@ -718,13 +1096,14 @@ class MainActivity:  AppCompatActivity(){
                     }
                     else if (!enabled) {
                         // Accessibility granted
-                        showAccessibilityPermissionDialog()
+                        showAccessibilityPermissionDialog(nonSystemApps[2].packageName.toString())
                     }
                     else
                         openApp(nonSystemApps[2].packageName.toString())
                 }
 
                 text4.setOnClickListener {
+                    Bugfender.d("MainActivity","text4");
                     val enabled = isAccessibilityServiceEnabled(
                         MyAccessibilityService::class.java
                     )
@@ -734,26 +1113,28 @@ class MainActivity:  AppCompatActivity(){
                     }
                     else if (!enabled) {
                         // Accessibility granted
-                        showAccessibilityPermissionDialog()
+                        showAccessibilityPermissionDialog(nonSystemApps[3].packageName.toString())
                     }
                     else
                         openApp(nonSystemApps[3].packageName.toString())
                 }
                 text5.setOnClickListener {
+                    Bugfender.d("MainActivity","text5");
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                         if (!accessibilityManager.isEnabled) {
                             // Accessibility granted
-                            showAccessibilityPermissionDialog()
+                            showAccessibilityPermissionDialog(nonSystemApps[4].packageName.toString())
                         }
                     }
                     else
                         openApp(nonSystemApps[4].packageName.toString())
                 }
                 text6.setOnClickListener {
+                    Bugfender.d("MainActivity","text6");
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                         if (!accessibilityManager.isEnabled) {
                             // Accessibility granted
-                            showAccessibilityPermissionDialog()
+                            showAccessibilityPermissionDialog(nonSystemApps[5].packageName.toString())
                         }
                     }
                     else
@@ -768,7 +1149,6 @@ class MainActivity:  AppCompatActivity(){
                 ic_6.setImageDrawable(getAppIcon(nonSystemApps[5].packageName.toString()));
 
 
-                println("heeeeeeeeeeeeeeeeeeeeloooooooooooooo");
                 for (usageStats in nonSystemApps) {
                     val packageName = usageStats.packageName
                     println(packageName);
@@ -783,6 +1163,7 @@ class MainActivity:  AppCompatActivity(){
         }
         val overlayStatusTextView: TextView = findViewById(R.id.overlay_permissionText)
         fun checkpermission() {
+            Bugfender.d("MainActivity","checkpermission");
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
                 // Overlay permission not granted
@@ -800,7 +1181,7 @@ class MainActivity:  AppCompatActivity(){
         }
         checkpermission();
         recentappsPermission();
-        tv_Speech_to_text = findViewById<TextView>(R.id.webview_text);
+
 
         val handler = Handler()
         val receivedIntent = intent
@@ -818,6 +1199,7 @@ class MainActivity:  AppCompatActivity(){
 
 
         if (sharedText != null) {
+            getData("https://trrain4-web.letstalksign.org/app_log?mode=video_interpreted&video_url=$sharedText&customer_id=10009&device_id=$deviceId&gmail_id=$userEmail&token=$token")
             val intent4 = Intent(this@MainActivity, FloatingWindowGFG::class.java);
             intent4.putExtra("url", sharedText.toString());
             startService(intent4);
@@ -826,9 +1208,10 @@ class MainActivity:  AppCompatActivity(){
 
 
         fun checkUsageAccessPermission() {
+            Bugfender.d("MainActivity","checkUsageAccessPermission");
             handler.postDelayed(object : Runnable {
                 override fun run() {
-                    if (alertDialog == null && !hasUsageAccessPermission() && !hasOverlayPermission()) {
+                    if (alertDialog == null && (!hasUsageAccessPermission() || !hasOverlayPermission())) {
                         requestUsageAccessPermission();
 //                        if(hasUsageAccessPermission() && hasOverlayPermission())
 //                            showAllPermissionsGrantedDialog();
@@ -993,30 +1376,8 @@ class MainActivity:  AppCompatActivity(){
         val drawerLayout = findViewById<DrawerLayout>(R.id.my_drawer_layout)
         val navigationView = findViewById<NavigationView>(R.id.navigationView)
 
-        fun enablenewAccessibilityService() {
-            val packageName = getApplicationContext().getPackageName();
-            val className = "$packageName.service.MyAccessibilityService"
-
-            val string = "enabled_accessibility_services"
-            var cmd = "settings put secure $string $packageName/$className"
-            cmd="adb shell "+cmd;
-            println(cmd)
-            Runtime.getRuntime().exec(cmd);
-
-//            Settings.Secure.putString(getContentResolver(),
-//                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, "$packageName/$className");
-//            Settings.Secure.putString(getContentResolver(),
-//                Settings.Secure.ACCESSIBILITY_ENABLED, "1");
-//            println(cmd);
-//            InstrumentationRegistry.getInstrumentation()
-//                .getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES)
-//                .executeShellCommand(cmd)
-//                .close()
-
-     //       TimeUnit.SECONDS.sleep(3)
-        }
-
         navigationView.setNavigationItemSelectedListener { menuItem ->
+            Bugfender.d("MainActivity","navigationView.setNavigationItemSelectedListener");
             when (menuItem.itemId) {
                 R.id.nav_settings -> {
                     openAccessibilitySettings();
@@ -1027,7 +1388,7 @@ class MainActivity:  AppCompatActivity(){
                 }
                 R.id.nav_logout -> {
                     showLogoutAlert();
-                    println("llllllllllllllllllooooooooooooooooggggggggggggggggggggg");
+
                     // Handle logout click
                     // Add your logic here
                     true
@@ -1051,18 +1412,11 @@ class MainActivity:  AppCompatActivity(){
         webView.getSettings().setSupportMultipleWindows(true);
 
         webView.settings.javaScriptCanOpenWindowsAutomatically = true
-        webView.evaluateJavascript("console.log(\"helllo world00999293\")", null)
-        webView.evaluateJavascript("window.postMessage(\"hello world test000\");") { result ->
-            println("Result of evaluateJavascript: $result")
-        }
-        webView.evaluateJavascript("window.addEventListener(\"message\", receiveMessage(event)\n" +
-                "{" +
-                "  console.log(\"eventtesting\"=event);\n" +
-                "    return;}, false);",null)
+
         webView.settings.domStorageEnabled = true
 
         webView.loadUrl(userurl)
-        //  webView.loadUrl("file:///android_asset/webview.html");
+       // webView.loadUrl("file:///android_asset/webview.html");
 
 
         webView.clearCache(true) // Clears the cache, including disk and memory caches.
@@ -1076,49 +1430,26 @@ class MainActivity:  AppCompatActivity(){
             }
         }
         var msg=tv_Speech_to_text!!.text.toString();
-        println("send messagexxxxxxxxxxxxxxxxxx");
+        webView.addJavascriptInterface(WebAppInterface(this), "AndroidInterface")
 
-
-//        interpretButton.setOnClickListener { view ->
-//
-//            var conditions = DownloadConditions.Builder().build()
-//
-//            println("Translating the text")
-//
-//            // Download the model if needed
-//
-//
-//
-//
-//            // Call the WebView's JavaScript function when the button is clicked
-//            var editText=findViewById<EditText>(R.id.mic_editText);
-//            msg=tv_Speech_to_text!!.text.toString();
-////            detectLanguage(msg);
-//            println("200000000000000ssssss")
-//            detectLanguage(msg);
-//            msg=removeQuotes(msg)+"thankyou";
-//            val jsCode = "sendMessage('$msg');"
-//            println(jsCode);
-//            webView.evaluateJavascript(jsCode,null)
-//        }
 
         val languageSpinner: Spinner = findViewById(R.id.languageSpinner)
         val languages = arrayOf("English", "Tamil", "Telugu", "Kannada", "Hindi", "Gujarati", "Marathi", "Bengali")
 
-// Create an ArrayAdapter using the string array and a default spinner layout
+        // Create an ArrayAdapter using the string array and a default spinner layout
         val sadapter = ArrayAdapter(this, R.layout.spinner_iteam, languages);
 
-// Specify the layout to use when the list of choices appears
+        // Specify the layout to use when the list of choices appears
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
 
-// Apply the adapter to the spinner
+        // Apply the adapter to the spinner
         languageSpinner.adapter = sadapter
 
-// Set up the OnItemSelectedListener
+        // Set up the OnItemSelectedListener
         languageSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parentView: AdapterView<*>?, selectedItemView: View?, position: Int, id: Long) {
                 // Get the selected item from the spinner
-                 selectedLanguage = languages[position]
+                selectedLanguage = languages[position]
 
                 val englishGermanTranslator = Translation.getClient(options)
                 if(selectedLanguage!="Choose language")
@@ -1207,34 +1538,76 @@ class MainActivity:  AppCompatActivity(){
 
 
         text_button.setOnClickListener {
-            if(selectedLanguage=="Choose language")
-                showChooseLanguageDialog()
-            else
-                showPopupWithEditText("","Text to Interpret")
+            Bugfender.d("MainActivity", "text_button")
+            getData("https://trrain4-web.letstalksign.org/app_log?mode=text_opened&language=$selectedLanguage&customer_id=10009&device_id=$deviceId&gmail_id=$userEmail&token=$token");
+            webviewTitle.text = "Entered Text:";
+            val text_button: ImageView = findViewById(R.id.webview_text_ic)
+            val text_title: TextView = findViewById(R.id.texttitle)
+            text_title.setTextSize(18F)
+            fun dpToPx(dp: Int): Int {
+                val density = resources.displayMetrics.density
+                return (dp * density).toInt()
+            }
+            text_button.layoutParams.height=dpToPx(42);
+            text_button.layoutParams.width=dpToPx(42);
+
+            val mic_button: ImageView = findViewById(R.id.webview_mic_ic)
+            val mic_title: TextView = findViewById(R.id.speakTitle)
+            mic_title.setTextSize(15F)
+            mic_button.layoutParams.height=dpToPx(35) // Increase height by 10dp
+            mic_button.layoutParams.width=dpToPx(35)
+
+            val scan_button: ImageView = findViewById(R.id.webview_scan_ic)
+            val scan_title: TextView = findViewById(R.id.scanTitle)
+            scan_title.setTextSize(15F)
+            scan_button.layoutParams.height=dpToPx(35)
+            scan_button.layoutParams.width=dpToPx(35);
+
+            tv_Speech_to_text.setText("Click the text button above to type text and initiate interpretation.")
+            showPopupWithEditText("","Text to Interpret")
         }
         iv_mic?.let { micButton ->
             micButton.setOnClickListener(View.OnClickListener {
-                if(selectedLanguage=="Choose language")
-                    showChooseLanguageDialog()
-                else {
-                    val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-                    intent.putExtra(
-                        RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-                        RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
-                    )
-//                intent.putExtra(
-//                    RecognizerIntent.EXTRA_LANGUAGE,
-//                    Locale.getDefault()
-//                )
-                    intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, language)
+                getData("https://trrain4-web.letstalksign.org/app_log?mode=audio_opened&language=$selectedLanguage&customer_id=10009&device_id=$deviceId&gmail_id=$userEmail&token=$token")
+                Bugfender.d("MainActivity","micButton");
 
-                    intent.putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak to text")
-                    try {
-                        startActivityForResult(intent, REQUEST_CODE_SPEECH_INPUT)
-                    } catch (e: Exception) {
-                        println(e.toString())
-                    }
+                val text_button: ImageView = findViewById(R.id.webview_text_ic)
+                val text_title: TextView = findViewById(R.id.texttitle)
+                text_title.setTextSize(15F)
+                fun dpToPx(dp: Int): Int {
+                    val density = resources.displayMetrics.density
+                    return (dp * density).toInt()
                 }
+                text_button.layoutParams.height=dpToPx(35);
+                text_button.layoutParams.width=dpToPx(35);
+
+                val mic_button: ImageView = findViewById(R.id.webview_mic_ic)
+                val mic_title: TextView = findViewById(R.id.speakTitle)
+                mic_title.setTextSize(18F)
+                mic_button.layoutParams.height=dpToPx(42) // Increase height by 10dp
+                mic_button.layoutParams.width=dpToPx(42)
+
+                val scan_button: ImageView = findViewById(R.id.webview_scan_ic)
+                val scan_title: TextView = findViewById(R.id.scanTitle)
+                scan_title.setTextSize(15F)
+                scan_button.layoutParams.height=dpToPx(35)
+                scan_button.layoutParams.width=dpToPx(35);
+                webviewTitle.setText("Spoken Text:")
+                tv_Speech_to_text.setText("Click the mic button above perform speach to sign interpretation.")
+                val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+                intent.putExtra(
+                    RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                    RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+                )
+                intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, language)
+
+                intent.putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak to text")
+                try {
+                    startActivityForResult(intent, REQUEST_CODE_SPEECH_INPUT)
+                } catch (e: Exception) {
+                    println(e.toString())
+                }
+
             })
         }
 
@@ -1254,6 +1627,7 @@ class MainActivity:  AppCompatActivity(){
 
 
         helppagebutton.setOnClickListener{
+            Bugfender.d("MainActivity","helppagebutton");
             if(helpage.visibility==View.GONE)
             {
                 homeButton.layoutParams.width=(25 * scale + 0.5f).toInt();
@@ -1275,6 +1649,7 @@ class MainActivity:  AppCompatActivity(){
         }
 
         micButton.setOnClickListener{
+            Bugfender.d("MainActivity","micButton");
             if(micselection.visibility==View.GONE)
             {
                 homeButton.layoutParams.width=(25 * scale + 0.5f).toInt();
@@ -1297,6 +1672,7 @@ class MainActivity:  AppCompatActivity(){
 
 
         homeButton.setOnClickListener{
+            Bugfender.d("MainActivity","homeButton");
             if(homepage.visibility==View.GONE)
             {
                 homeButton.layoutParams.width=(35 * scale + 0.5f).toInt();
@@ -1318,6 +1694,7 @@ class MainActivity:  AppCompatActivity(){
         }
 
         chrome_usage_button.setOnClickListener{
+            Bugfender.d("MainActivity","chrome_usage_button");
             if(chrome_description.visibility==View.VISIBLE) {
                 chrome_description.visibility = View.GONE;
                 chrome_video.pause()
@@ -1332,6 +1709,7 @@ class MainActivity:  AppCompatActivity(){
         }
 
         wts_usage_button.setOnClickListener{
+            Bugfender.d("MainActivity","wts_usage_button");
             if(wts_description.visibility==View.VISIBLE) {
                 wts_description.visibility = View.GONE;
                 whatsapp_video.pause()
@@ -1345,7 +1723,9 @@ class MainActivity:  AppCompatActivity(){
             }
         }
         yt_usage_button.setOnClickListener{
+            Bugfender.d("MainActivity","yt_usage_button");
             if(yt_description.visibility==View.VISIBLE) {
+
                 yt_description.visibility = View.GONE;
                 videoView.pause()
             }
@@ -1359,6 +1739,7 @@ class MainActivity:  AppCompatActivity(){
         }
 
         dropdownbutton0.setOnClickListener{
+            Bugfender.d("MainActivity","dropdownbutton0");
             if(permisionText0.visibility==View.VISIBLE)
                 permisionText0.visibility=View.GONE;
             else {
@@ -1397,7 +1778,9 @@ class MainActivity:  AppCompatActivity(){
 
 
         searchview.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
+
             override fun onQueryTextSubmit(query: String?): Boolean {
+                Bugfender.d("MainActivity","searchview");
                 if (appnames.contains(query)) {
                     adapter.filter.filter(query)
                 } else {
@@ -1414,14 +1797,45 @@ class MainActivity:  AppCompatActivity(){
         })
 
     }
+
+    private fun setUpCheckBoxListener() {
+        // Get reference to CheckBox
+        val checkBox: CheckBox = findViewById(R.id.SMSCheckBox)
+
+        // Set a listener for checkbox changes
+        checkBox.setOnCheckedChangeListener { buttonView, isChecked ->
+            // Handle checkbox state change
+            if (isChecked) {
+                // Checkbox is checked
+                // Do something when the checkbox is checked
+            } else {
+                // Checkbox is unchecked
+                // Do something when the checkbox is unchecked
+            }
+        }
+    }
+
+    // Handle the result of the permission request
+
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        Bugfender.d("MainActivity","onSaveInstanceState")
+        outState.putParcelable("imageUri", imageUri)
+    }
+
+    override fun onRestoreInstanceState(savedInstanceState: Bundle) {
+        super.onRestoreInstanceState(savedInstanceState)
+        Bugfender.d("ImageUriff",imageUri.toString())
+        imageUri = savedInstanceState.getParcelable("imageUri")
+    }
     override fun onStop() {
         super.onStop()
         if (sessionDepth > 0) sessionDepth--
         if (sessionDepth == 0) {
-//            println("fffffffffwwwwwwwwwwwwwwwwwwwwwwwdddddddddddddddd");
+            Bugfender.d("MainActivity","background");
             val isFloatingWindowServiceRunning = isServiceRunning(this, FloatingWindowGFG::class.java)
             if (isFloatingWindowServiceRunning) {
-                println("55555555555555555555555555555");
                 // Stop the service
                 val intent = Intent("stop_action_overlay")
                 intent.putExtra("stop_message_overlay", "start")
@@ -1433,6 +1847,7 @@ class MainActivity:  AppCompatActivity(){
         }
     }
     private fun hasUsageAccessPermission(): Boolean {
+        Bugfender.d("MainActivity","hasUsageAccessPermission");
         val appOpsManager = getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
         val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             appOpsManager.unsafeCheckOpNoThrow(
@@ -1450,6 +1865,7 @@ class MainActivity:  AppCompatActivity(){
     }
 
     private fun hasOverlayPermission(): Boolean {
+        Bugfender.d("MainActivity","hasOverlayPermission");
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             Settings.canDrawOverlays(this)
         } else {
@@ -1458,81 +1874,53 @@ class MainActivity:  AppCompatActivity(){
         }
     }
 
-    private fun showAllPermissionsGrantedDialog() {
-        val builder = AlertDialog.Builder(this)
-        builder.setTitle("Permissions Granted")
-            .setMessage("All required permissions have been granted.")
-            .setPositiveButton("OK") { _, _ ->
-                // Handle the "OK" button click if needed
-            }
-            .show()
-    }
 
-//    private fun requestUsageAccessPermission() {
-//        val builder = AlertDialog.Builder(this)
-//        builder.setTitle("Permissions Required")
-//            .setMessage("Please grant the following permissions to use this app:\n\n" +
-//                    "1. Usage access permission\n" +
-////                    "2. Accessibility access permission\n" +
-//                    "2. Overlay permission\n" +
-//                    "You can also grant these and other permissions later using the help page")
-//            .setPositiveButton("Grant Usage Access") { _, _ ->
-//                openUsageAccessSettings()
-//                alertDialog = null
-//                // Comment out the line below if you want the dialog to remain open
-//                //alertDialog?.dismiss()
-//            }
-//            .setNegativeButton("Grant Overlay Permission") { _, _ ->
-//                openOverlaySettings()
-//                alertDialog = null
-//                // Comment out the line below if you want the dialog to remain open
-////                alertDialog?.dismiss()
-//            }
-////            .setNeutralButton("Grant Accessibility Access") { _, _ ->
-////                openAccessibilitySettings()
-////                alertDialog = null
-////                // Comment out the line below if you want the dialog to remain open
-////                //alertDialog?.dismiss()
-////            }
-//
-//            // Remove the line below to make the dialog non-dismissable
-//            .setCancelable(true)
-//            .setOnDismissListener {
-//                alertDialog = null
-//            }
-//
-//        alertDialog = builder.show()
-//    }
+
     private fun requestUsageAccessPermission() {
+        Bugfender.d("MainActivity","requestUsageAccessPermission");
         val dialogView = layoutInflater.inflate(R.layout.permission_required, null)
         val dialogTitle = dialogView.findViewById<TextView>(R.id.dialogTitle)
         val dialogMessage = dialogView.findViewById<TextView>(R.id.dialogMessage)
         val btnGrantUsageAccess = dialogView.findViewById<Button>(R.id.btnGrantUsageAccess)
         val btnGrantOverlayPermission = dialogView.findViewById<Button>(R.id.btnGrantOverlayPermission)
+        if(hasUsageAccessPermission())
+        {
+            btnGrantUsageAccess.isEnabled=false
+        }
+        if(hasOverlayPermission())
+        {
+            btnGrantOverlayPermission.isEnabled=false
+        }
+        if(alertDialog!=null){
+            alertDialog?.dismiss();
+            alertDialog=null;
+        }
+
 
         dialogTitle.text = "Permissions Required"
         dialogMessage.text = "Please grant the following permissions to use this app:\n\n" +
                 "1. Usage access permission\n" +
-                "2. Overlay permission\n" +
-                "You can also grant these and other permissions later using the help page"
+                "2. Overlay permission\n"
 
         val builder = AlertDialog.Builder(this)
-        builder.setView(dialogView)
+        builder.setView(dialogView).setCancelable(false)
         alertDialog = builder.show()
 
+        if(hasUsageAccessPermission() && hasOverlayPermission()) {
+            println("111111111111111dissssssssssmissssssssssssssssssssssss");
+            alertDialog?.dismiss()
+            alertDialog=null;
+        }
         btnGrantUsageAccess.setOnClickListener {
             openUsageAccessSettings()
-            alertDialog?.dismiss()
-            alertDialog = null
+//            alertDialog?.dismiss()
+//            alertDialog = null
         }
 
         btnGrantOverlayPermission.setOnClickListener {
             openOverlaySettings()
-            alertDialog = null
+//            alertDialog = null
         }
-
-        // Remove the line below to make the dialog non-dismissable
-        builder.setCancelable(true)
         builder.setOnDismissListener {
             alertDialog = null
         }
@@ -1544,15 +1932,18 @@ class MainActivity:  AppCompatActivity(){
 
 
     private fun openAccessibilitySettings() {
+        Bugfender.d("MainActivity","openAccessibilitySettings");
         val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
         startActivityForResult(intent,1);
     }
 
     private fun openOverlaySettings() {
+        Bugfender.d("MainActivity","openOverlaySettings");
         val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION)
         startActivityForResult(intent, 1);
     }
     private fun openUsageAccessSettings() {
+        Bugfender.d("MainActivity","openUsageAccessSettings");
         val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
         startActivityForResult(intent, USAGE_ACCESS_REQUEST_CODE)
     }
@@ -1581,22 +1972,20 @@ class MainActivity:  AppCompatActivity(){
             }
     }
 
-
-    private fun detectLanguage(text: String) {
-        println("yessss im innnnnnnnnnnnnn");
-        val languageIdentifier = LanguageIdentification.getClient()
-        languageIdentifier.identifyLanguage(text)
-            .addOnSuccessListener { languageCode ->
-                if (languageCode == "und") {
-                    println( "Can't identify language.")
-                } else {
-                    println( "Language: $languageCode")
-                }
-            }
-            .addOnFailureListener {
-                // Model couldn’t be loaded or other internal error.
-                // ...
-            }
+    private fun openApp(packageName: String) {
+        Bugfender.d("MainActivity","openApp");
+        val packageManager = this.packageManager
+        // Check if app is installed
+        val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
+        if (launchIntent != null) {
+            println("openAppAction");
+            getData("https://trrain4-web.letstalksign.org/app_log?mode=app_interpreted&app_name=$packageName&customer_id=10009&device_id=$deviceId&gmail_id=$userEmail&token=$token")
+            getData("https://trrain4-web.letstalksign.org/app_log?mode=app_opened&app_name=$packageName&customer_id=10009&device_id=$deviceId&gmail_id=$userEmail&token=$token")
+            startActivity(launchIntent)
+        } else {
+            // App not found or not installed
+            Toast.makeText(this, "App not found: $packageName", Toast.LENGTH_SHORT).show()
+        }
     }
 
     override fun onActivityResult(
@@ -1609,6 +1998,7 @@ class MainActivity:  AppCompatActivity(){
                 val result = data.getStringArrayListExtra(
                     RecognizerIntent.EXTRA_RESULTS
                 )
+                var tv_Speech_to_text = findViewById<TextView>(R.id.webview_text);
                 tv_Speech_to_text!!.visibility=View.VISIBLE;
                 translatetoEnglish( " "+Objects.requireNonNull(result)?.get(0)){text ->
                     if(text=="Translation failed" || text=="Model download failed")
@@ -1627,104 +2017,50 @@ class MainActivity:  AppCompatActivity(){
     @SuppressLint("MissingInflatedId")
 
     fun removeQuotes(text: String): String {
+        Bugfender.d("MainActivity","removeQuotes");
         val singleLineText = text.replace("\n", " ").replace("\r", " ")
         return singleLineText.replace("'", "").replace("\"", "")
     }
+
+    fun sessionAlert(context: Context) {
+        val inflater = LayoutInflater.from(context)
+        val view = inflater.inflate(R.layout.session_timeout_alert, null)
+
+        val alertDialog = AlertDialog.Builder(context)
+            .setView(view)
+            .setCancelable(false)
+            .create()
+
+        // Set click listener for the "OK" button
+        view.findViewById<Button>(R.id.okButton).setOnClickListener {
+            Bugfender.d("showLogoutAlert","Yes");
+            val sharedPreferences = getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
+            val editor = sharedPreferences.edit()
+            editor.clear()
+            editor.apply()
+            mGoogleSignInClient.signOut().addOnCompleteListener {
+                val intent = Intent(this, Signin_page::class.java)
+                Toast.makeText(this, "Logging Out", Toast.LENGTH_SHORT).show();
+                startActivity(intent)
+                finish()
+            }
+            alertDialog.dismiss()
+            // Add any logic you need to perform when the user clicks "OK"
+        }
+
+        alertDialog.show()
+    }
     @SuppressLint("MissingInflatedId", "SetTextI18n")
     private fun showPopupWithEditText(initialText: CharSequence, Title:String) {
+        Bugfender.d("MainActivity","showPopupWithEditText");
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO);
         val builder = AlertDialog.Builder(this)
-//        builder.setTitle(Title)
-
-        // Set up the layout for the dialog
         val layout = layoutInflater.inflate(R.layout.popup_layout, null)
-        val webviewTitle:TextView=findViewById(R.id.title_webview_text);
-        if(Title=="Text to Interpret")
-        {
-            val text_button: ImageView = findViewById(R.id.webview_text_ic)
-            val text_title: TextView = findViewById(R.id.texttitle)
-            text_title.setTextSize(18F)
-             fun dpToPx(dp: Int): Int {
-                val density = resources.displayMetrics.density
-                return (dp * density).toInt()
-            }
-            text_button.layoutParams.height=dpToPx(42);
-            text_button.layoutParams.width=dpToPx(42);
-
-            val mic_button: ImageView = findViewById(R.id.webview_mic_ic)
-            val mic_title: TextView = findViewById(R.id.speakTitle)
-            mic_title.setTextSize(15F)
-            mic_button.layoutParams.height=dpToPx(35) // Increase height by 10dp
-            mic_button.layoutParams.width=dpToPx(35)
-
-            val scan_button: ImageView = findViewById(R.id.webview_scan_ic)
-            val scan_title: TextView = findViewById(R.id.scanTitle)
-            scan_title.setTextSize(15F)
-            scan_button.layoutParams.height=dpToPx(35)
-            scan_button.layoutParams.width=dpToPx(35);
-
-
-
-            webviewTitle.text = "Entered Text:";
-        }
-        else if(Title=="Scanned Text")
-        {
-            val text_button: ImageView = findViewById(R.id.webview_text_ic)
-            val text_title: TextView = findViewById(R.id.texttitle)
-            text_title.setTextSize(15F)
-            fun dpToPx(dp: Int): Int {
-                val density = resources.displayMetrics.density
-                return (dp * density).toInt()
-            }
-            text_button.layoutParams.height=dpToPx(35);
-            text_button.layoutParams.width=dpToPx(35);
-
-            val mic_button: ImageView = findViewById(R.id.webview_mic_ic)
-            val mic_title: TextView = findViewById(R.id.speakTitle)
-            mic_title.setTextSize(15F)
-            mic_button.layoutParams.height=dpToPx(35) // Increase height by 10dp
-            mic_button.layoutParams.width=dpToPx(35)
-
-            val scan_button: ImageView = findViewById(R.id.webview_scan_ic)
-            val scan_title: TextView = findViewById(R.id.scanTitle)
-            scan_title.setTextSize(18F)
-            scan_button.layoutParams.height=dpToPx(42)
-            scan_button.layoutParams.width=dpToPx(42);
-
-
-
-            webviewTitle.setText("Scanned Text:");
-        }
-        else if(Title=="Recognised Text")
-        {
-            val text_button: ImageView = findViewById(R.id.webview_text_ic)
-            val text_title: TextView = findViewById(R.id.texttitle)
-            text_title.setTextSize(15F)
-            fun dpToPx(dp: Int): Int {
-                val density = resources.displayMetrics.density
-                return (dp * density).toInt()
-            }
-            text_button.layoutParams.height=dpToPx(35);
-            text_button.layoutParams.width=dpToPx(35);
-
-            val mic_button: ImageView = findViewById(R.id.webview_mic_ic)
-            val mic_title: TextView = findViewById(R.id.speakTitle)
-            mic_title.setTextSize(18F)
-            mic_button.layoutParams.height=dpToPx(42) // Increase height by 10dp
-            mic_button.layoutParams.width=dpToPx(42)
-
-            val scan_button: ImageView = findViewById(R.id.webview_scan_ic)
-            val scan_title: TextView = findViewById(R.id.scanTitle)
-            scan_title.setTextSize(15F)
-            scan_button.layoutParams.height=dpToPx(35)
-            scan_button.layoutParams.width=dpToPx(35);
-
-            webviewTitle.setText("Spoken Text:")
-        }
+        interpretButton =layout.findViewById<Button>(R.id.interpretButton);
         val languagetext:TextView=layout.findViewById(R.id.type_title);
         var editText = layout.findViewById<EditText>(R.id.popupEditText)
         var title =layout.findViewById<TextView>(R.id.titlePopup);
-        val interpretButton =layout.findViewById<Button>(R.id.interpretButton);
+
         val cancelButton=layout.findViewById<Button>(R.id.cancelButton);
         var titletext=languagetext.text;
         var ogtext=titletext;
@@ -1788,28 +2124,31 @@ class MainActivity:  AppCompatActivity(){
 
 
         title.setText(Title)
-//        val okButton = layout.findViewById<Button>(R.id.okButton)
-//        val cancelButton = layout.findViewById<Button>(R.id.cancelButton)
-
-        // Set the initial text for the EditText
         editText.setText("");
         if(initialText!="")
             editText.setText(sanitizeText(initialText.toString()))
-        else{
+        if(!ReadyFlag){
+            interpretButton.setText("Loading..")
             interpretButton.isEnabled=false;
-
+        }
+        else{
+            interpretButton.setText("Interpret")
+            interpretButton.isEnabled=true;
         }
         editText.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(charSequence: CharSequence?, start: Int, count: Int, after: Int) {
-                // Not needed for this example
             }
 
             override fun onTextChanged(charSequence: CharSequence?, start: Int, before: Int, count: Int) {
-                interpretButton.isEnabled = !charSequence.isNullOrBlank()
+                interpretButton.isEnabled = (!charSequence.isNullOrBlank())
+                if(!ReadyFlag)
+                {
+                    interpretButton.isEnabled=false;
+                }
+
             }
 
             override fun afterTextChanged(editable: Editable?) {
-                // Not needed for this example
             }
         })
 
@@ -1823,6 +2162,17 @@ class MainActivity:  AppCompatActivity(){
         val dialog =builder.create();
         dialog.show();
         interpretButton.setOnClickListener {
+            if(Title=="Scanned Text") {
+                getData("https://trrain4-web.letstalksign.org/app_log?mode=scan_interpreted&language=english&customer_id=10009&device_id=$deviceId&gmail_id=$userEmail&token=$token")
+            }
+            else if(Title=="Text to Interpret")
+            {
+                getData("https://trrain4-web.letstalksign.org/app_log?mode=text_interpreted&language=$selectedLanguage&customer_id=10009&device_id=$deviceId&gmail_id=$userEmail&token=$token")
+            }
+            else if(Title=="Recognised Text")
+            {
+                getData("https://trrain4-web.letstalksign.org/app_log?mode=audio_interpreted&language=$selectedLanguage&customer_id=10009&device_id=$deviceId&gmail_id=$userEmail&token=$token")
+            }
             if(selectedLanguage!="English")
             {
                 if(selectedLanguage=="Tamil") {
@@ -1845,13 +2195,6 @@ class MainActivity:  AppCompatActivity(){
                         .setSourceLanguage(TranslateLanguage.KANNADA)
                         .setTargetLanguage(TranslateLanguage.ENGLISH)
                         .build()
-                }
-                else if(selectedLanguage=="Malayalam") {
-                    language = "ml-IN";
-                    //                    options = TranslatorOptions.Builder()
-                    //                        .setSourceLanguage(TranslateLanguage.MALAYA)
-                    //                        .setTargetLanguage(TranslateLanguage.ENGLISH)
-                    //                        .build()
                 }
                 else if(selectedLanguage=="Hindi") {
                     language = "hi-IN";
@@ -1884,11 +2227,12 @@ class MainActivity:  AppCompatActivity(){
                 this@MainActivity.englishGermanTranslator = Translation.getClient(options)
                 translatetoEnglish(editText.text.toString())
                 {text->
-                    println("oooooooooooooooooooooooolooo0");
-                    println(text);
+                    println("translated text"+text);
+                    Bugfender.d("MainAcEdittextPopup",text.toString());
                     var ftext=this@MainActivity.removeQuotes(text)
                     ftext=ftext.replace("\n","");
                     ftext=ftext.replace("\b","");
+                    var tv_Speech_to_text = findViewById<TextView>(R.id.webview_text);
                     tv_Speech_to_text?.setText(ftext);
                     tv_Speech_to_text?.visibility=View.VISIBLE;
                     //val jsCode = "sendMessage('${ftext}');"
@@ -1898,11 +2242,12 @@ class MainActivity:  AppCompatActivity(){
                 }
             }
             else {
-                println("oooooooooooooooooooooooolooo0");
+                Bugfender.d("EditText",editText.text.toString());
                 println(editText.text);
                 var ftext=this@MainActivity.removeQuotes(editText.text.toString())
                 ftext=ftext.replace("\n","");
                 ftext=ftext.replace("\b","");
+                var tv_Speech_to_text = findViewById<TextView>(R.id.webview_text);
                 tv_Speech_to_text?.setText(sanitizeText(ftext));
                 tv_Speech_to_text?.visibility=View.VISIBLE;
                 val jsCode = "sendMessage(\"${ftext}\")";
@@ -1919,27 +2264,8 @@ class MainActivity:  AppCompatActivity(){
         cancelButton.setOnClickListener {
             dialog.dismiss()
         }
-        // Set up the "Ok" button
-//        builder.setPositiveButton("Interpret") { dialog, _ ->
-//
-//        }
-//
-//        // Set up the "Cancel" button
-//        builder.setNegativeButton("Cancel") { dialog, _ ->
-//            // Handle the Cancel button click
-//            dialog.dismiss()
-//        }
-//
-//        val dialog = builder.create()
-//        dialog.show()
     }
 
-//    private fun openApp(packageName: String) {
-//        val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
-//        if (launchIntent != null) {
-//            startActivity(launchIntent)
-//        }
-//    }
 
     fun showLanguageNotSupportedDialog(context: Context) {
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO);
@@ -1956,47 +2282,8 @@ class MainActivity:  AppCompatActivity(){
 
     }
 
-     fun enableAccessibilityService() {
-        // Define the package name and class name of the Accessibility Service
-        val packageName = getApplicationContext().getPackageName();
-        val className = "$packageName.service.MyAccessibilityService"
-
-        // Define the string used for enabling accessibility services
-        val string = "enabled_accessibility_services"
-
-        // Construct the shell command to enable the specified Accessibility Service
-        val cmd = "settings put secure $string $packageName/$className"
-
-        println(cmd);
-
-        // Use UiAutomation to execute the shell command
-        InstrumentationRegistry.getInstrumentation()
-            .getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES)
-            .executeShellCommand(cmd)
-            .close()
-
-        // Pause execution for 3 seconds (for demonstration purposes)
-        TimeUnit.SECONDS.sleep(3)
-    }
-
-    private fun showChooseLanguageDialog() {
-        AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO);
-        val builder = AlertDialog.Builder(this)
-        val layout = layoutInflater.inflate(R.layout.language_support_alert, null)
-        val okButoon:Button = layout.findViewById(R.id.okButton);
-        val title:TextView =layout.findViewById(R.id.alertTitle);
-        val message :TextView =layout.findViewById(R.id.alertMessage);
-        title.setText("Choose Language");
-        message.setText("Please select a language before interpreting");
-        builder.setView(layout)
-        val dialog =builder.create();
-        okButoon.setOnClickListener {
-            dialog.dismiss();
-        }
-        dialog.show();
-
-    }
     private fun showProgressDialog() {
+        Bugfender.d("MainActivity","showProgressDialog");
         progressDialog = ProgressDialog(this)
         progressDialog?.setMessage("Downloading translation model please wait this may take few seconds...")
         progressDialog?.setCancelable(false)
@@ -2004,6 +2291,7 @@ class MainActivity:  AppCompatActivity(){
     }
 
     private fun dismissProgressDialog() {
+        Bugfender.d("MainActivity","dismissProgressDialog");
         progressDialog?.dismiss()
         progressDialog = null
     }

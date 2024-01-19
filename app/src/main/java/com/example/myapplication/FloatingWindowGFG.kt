@@ -407,7 +407,7 @@ class FloatingWindowGFG : Service() {
             println("heeeeeeeeeeeeeeelo"+youtubeUrl);
             // Define your Flask API endpoint
 
-            val apiEndpoint = "http://152.69.200.148:7070/get_captions?url=$youtubeUrl"
+            val apiEndpoint = "https://trrain4-web.letstalksign.org/get_captions?url=$youtubeUrl"
 
 
             // Create an instance of OkHttpClient
@@ -581,7 +581,7 @@ class FloatingWindowGFG : Service() {
         }
 
         floatWindowLayoutParam = WindowManager.LayoutParams(
-            735, (height * 0.65f).toInt(),
+            ViewGroup.LayoutParams.WRAP_CONTENT,ViewGroup.LayoutParams.WRAP_CONTENT,
             LAYOUT_TYPE,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
             PixelFormat.TRANSPARENT
@@ -636,7 +636,7 @@ class FloatingWindowGFG : Service() {
             hideTranscript.visibility=View.VISIBLE;
             val newWidth =  735
             val newHeight =  (height * 0.80f).toInt()
-            floatWindowLayoutParam!!.width = newWidth
+            floatWindowLayoutParam!!.width = ViewGroup.LayoutParams.WRAP_CONTENT
             floatWindowLayoutParam!!.height = ViewGroup.LayoutParams.WRAP_CONTENT
             windowManager!!.updateViewLayout(floatView, floatWindowLayoutParam)
             showTranscript.visibility=View.GONE
@@ -647,7 +647,7 @@ class FloatingWindowGFG : Service() {
             captionsWidget.visibility=View.GONE;
             val newWidth =  735
             val newHeight =  (height * 0.58f).toInt()
-            floatWindowLayoutParam!!.width = newWidth
+            floatWindowLayoutParam!!.width = ViewGroup.LayoutParams.WRAP_CONTENT
             floatWindowLayoutParam!!.height = ViewGroup.LayoutParams.WRAP_CONTENT
             windowManager!!.updateViewLayout(floatView, floatWindowLayoutParam)
             hideTranscript.visibility=View.GONE

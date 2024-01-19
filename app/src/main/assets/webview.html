@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" xmlns="">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,13 +7,15 @@
 </head>
 <body>
 
-    <h1>WebView test00!</h1>
+<h1>Hello WebView!!!</h1>
 
-    <script>
-        console.log("console test00");
-        function receiveMessageFromAndroid(message) {
-            console.log(message);
-            console.log("testing090");
+<button onclick="callAndroidFunction()">Call Android Function</button>
+
+<script>
+        function callAndroidFunction() {
+            console.log("hjvbhdfbvhdbhvbhdbhvdhfvgv");
+            // Call the Android function with a parameter
+            AndroidInterface.sendDataToAndroid("Hello from JavaScript!");
         }
     </script>
 
